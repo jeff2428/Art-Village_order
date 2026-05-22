@@ -119,7 +119,7 @@ function createJsonResponse(data) {
 /**
  * menu-api.js
  * 菜單 API 端點模組
- * 職責：提供菜單資料（含分類、客製化選項、庫存狀態）
+ * 職責：提供菜單資料（含分類、客製化選項）
  */
 
 /**
@@ -183,7 +183,7 @@ function handleMenuGet(e) {
 }
 
 /**
- * 取得完整菜單資料（含分類與庫存過濾）
+ * 取得完整菜單資料
  * @param {string} spreadsheetId - Google Sheet ID
  * @returns {Object} API 回應物件
  */
@@ -202,35 +202,10 @@ function getFullMenuData(spreadsheetId) {
     }
     
     var menuData = getFullMenu(spreadsheetId);
-    var inventory = getInventory(spreadsheetId);
-    
-    var inventoryMap = {};
-    for (var i = 0; i < inventory.length; i++) {
-      inventoryMap[inventory[i].itemName] = inventory[i].inStock;
-    }
-    
-    var filteredItems = [];
-    for (var j = 0; j < menuData.items.length; j++) {
-      var item = menuData.items[j];
-      var isInStock = inventoryMap.hasOwnProperty(item.name) 
-        ? inventoryMap[item.name] 
-        : true;
-      
-      if (isInStock) {
-        filteredItems.push({
-          category: item.category,
-          name: item.name,
-          price: item.price,
-          description: item.description,
-          customizationOptions: item.customizationOptions,
-          soldOut: false
-        });
-      }
-    }
     
     var result = {
       categories: menuData.categories,
-      items: filteredItems
+      items: menuData.items
     };
     
     cache.put(cacheKey, JSON.stringify(result), 300);
@@ -1096,14 +1071,14 @@ function makeMenuId(prefix, value, index) {
 /**
  * sheet-config.js
  * 系統設定存取模組
- * 職責：系統設定讀寫（營業時間、休假、庫存、公告）
+ * 職責：系統設定讀寫（營業時間、休假、公告）
  */
 
 /**
  * 設定 Sheet 分頁定義
  * - "營業時間"：開始時間、結束時間
  * - "休假日期"：日期、原因
- * - "庫存設定"：品名、庫存狀態（true/false）
+
  * - "公告設定"：版位、內容、顯示開關
  */
 
@@ -1331,127 +1306,6 @@ function removeHoliday(spreadsheetId, date, sheetName) {
     return {
       success: false,
       message: '刪除休假日期失敗: ' + e.toString()
-    };
-  }
-}
-
-/**
- * 讀取庫存設定
- * @param {string} spreadsheetId - Google Sheet 的 ID
- * @param {string} sheetName - 工作表名稱（預設為 "庫存設定"）
- * @returns {Array<Object>} 庫存設定陣列 [{ itemName: string, inStock: boolean }]
- */
-function getInventory(spreadsheetId, sheetName) {
-  sheetName = sheetName || '庫存設定';
-  
-  try {
-    var ss = SpreadsheetApp.openById(spreadsheetId);
-    var sheet = ss.getSheetByName(sheetName);
-    
-    if (!sheet) {
-      return [];
-    }
-    
-    var data = sheet.getDataRange().getValues();
-    var inventory = [];
-    
-    for (var i = 1; i < data.length; i++) {
-      if (data[i][0]) {
-        inventory.push({
-          itemName: data[i][0],
-          inStock: data[i][1] === true || data[i][1] === 'TRUE'
-        });
-      }
-    }
-    
-    return inventory;
-    
-  } catch (e) {
-    Logger.log('getInventory 錯誤: ' + e.toString());
-    throw new Error('讀取庫存設定失敗: ' + e.toString());
-  }
-}
-
-/**
- * 更新個別餐點庫存狀態
- * @param {string} spreadsheetId - Google Sheet 的 ID
- * @param {string} itemName - 餐點名稱
- * @param {boolean} inStock - 庫存狀態
- * @param {string} sheetName - 工作表名稱
- * @returns {Object} { success: boolean, message: string }
- */
-function updateInventoryItem(spreadsheetId, itemName, inStock, sheetName) {
-  sheetName = sheetName || '庫存設定';
-  
-  try {
-    var ss = SpreadsheetApp.openById(spreadsheetId);
-    var sheet = ss.getSheetByName(sheetName);
-    
-    if (!sheet) {
-      sheet = ss.insertSheet(sheetName);
-      sheet.appendRow(['品名', '庫存狀態']);
-    }
-    
-    var data = sheet.getDataRange().getValues();
-    
-    for (var i = 1; i < data.length; i++) {
-      if (data[i][0] === itemName) {
-        sheet.getRange(i + 1, 2).setValue(inStock);
-        clearMenuCache();
-        return {
-          success: true,
-          message: '已更新庫存: ' + itemName + ' = ' + (inStock ? '可售' : '完售')
-        };
-      }
-    }
-    
-    sheet.appendRow([itemName, inStock]);
-    clearMenuCache();
-    return {
-      success: true,
-      message: '已新增庫存設定: ' + itemName
-    };
-    
-  } catch (e) {
-    Logger.log('updateInventoryItem 錯誤: ' + e.toString());
-    return {
-      success: false,
-      message: '更新庫存失敗: ' + e.toString()
-    };
-  }
-}
-
-/**
- * 批次更新庫存
- * @param {string} spreadsheetId - Google Sheet 的 ID
- * @param {Array<Object>} items - [{ itemName: string, inStock: boolean }]
- * @param {string} sheetName - 工作表名稱
- * @returns {Object} { success: boolean, message: string }
- */
-function batchUpdateInventory(spreadsheetId, items, sheetName) {
-  sheetName = sheetName || '庫存設定';
-  
-  try {
-    var results = [];
-    
-    for (var i = 0; i < items.length; i++) {
-      var result = updateInventoryItem(spreadsheetId, items[i].itemName, items[i].inStock, sheetName);
-      results.push(result);
-    }
-    
-    clearMenuCache();
-    
-    return {
-      success: true,
-      message: '批次更新完成，共 ' + items.length + ' 項',
-      details: results
-    };
-    
-  } catch (e) {
-    Logger.log('batchUpdateInventory 錯誤: ' + e.toString());
-    return {
-      success: false,
-      message: '批次更新庫存失敗: ' + e.toString()
     };
   }
 }
@@ -3895,7 +3749,7 @@ function appendEmployeeRows(sheet, rows) {
 /**
  * admin-api.js
  * 管理後台 API 端點模組
- * 職責：提供管理後台 CRUD 端點（菜單、設定、庫存、公告）
+ * 職責：提供管理後台 CRUD 端點（菜單、設定、公告）
  */
 
 /**
@@ -3958,15 +3812,6 @@ function handleAdminPost(e) {
         break;
       case 'removeHoliday':
         result = removeHoliday(spreadsheetId, data.date);
-        break;
-      case 'getInventory':
-        result = { success: true, data: getInventory(spreadsheetId) };
-        break;
-      case 'updateInventory':
-        result = updateInventoryItem(spreadsheetId, data.itemName, data.inStock);
-        break;
-      case 'batchUpdateInventory':
-        result = batchUpdateInventory(spreadsheetId, data.items);
         break;
       case 'getAnnouncements':
         result = { success: true, data: getAnnouncements(spreadsheetId) };

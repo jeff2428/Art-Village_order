@@ -105,7 +105,7 @@ var AdminMenu = (function() {
         name: String(item.name || ''),
         description: String(item.description || ''),
         price: parseNumber(item.price, 0),
-        soldOut: false,
+        soldOut: parseBoolean(item.soldOut, item.inStock === false),
         sortOrder: parseNumber(item.sortOrder, (index + 1) * 10),
         enabled: item.enabled !== false,
         imageUrl: String(item.imageUrl || ''),
@@ -429,7 +429,7 @@ var AdminMenu = (function() {
   function openCategoryForm(id) {
     var category = findById(fullMenuState.categories, id) || { id: '', name: '', sortOrder: nextSort(fullMenuState.categories), enabled: true };
     var isNewCategory = !category.id;
-    var categoryNameLimit = 30;
+    var categoryNameLimit = 15;
 
     openDialog(isNewCategory ? '新增分類' : '編輯分類',
       '<label class="block"><span class="mb-1 block text-sm font-bold">分類名稱</span><input id="menuFormName" value="' + escapeAttribute(category.name) + '" maxlength="' + categoryNameLimit + '" placeholder="例如：火鍋、飯類、飲品" data-autofocus="true" class="w-full rounded border px-3 py-2 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-100"></label>' +
@@ -528,7 +528,7 @@ var AdminMenu = (function() {
     };
 
     var isNewOption = !option.id;
-    var optionNameLimit = 30;
+    var optionNameLimit = 15;
 
     openDialog(isNewOption ? '新增客製化群組' : '編輯客製化群組',
       '<label class="block"><span class="mb-1 block text-sm font-bold">群組名稱</span><input id="menuFormName" value="' + escapeAttribute(option.name) + '" maxlength="' + optionNameLimit + '" placeholder="例如：甜度、加麵、配料" data-autofocus="true" class="w-full rounded border px-3 py-2 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-100"></label>' +
@@ -844,51 +844,53 @@ var AdminMenu = (function() {
       return;
     }
 
-    var state = normalizeMenuState(fullMenuState);
+    var sheets = buildTemplateSheets(fullMenuState);
     var workbook = XLSX.utils.book_new();
 
-    // Categories
-    var catRows = [['categoryId', 'name', 'sortOrder', 'enabled']];
-    (state.categories || []).forEach(function(c) {
-      catRows.push([c.id, c.name, c.sortOrder, c.enabled]);
-    });
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(catRows), 'Categories');
-
-    // OptionGroups
-    var ogRows = [['groupId', 'name', 'type', 'required', 'sortOrder', 'enabled']];
-    (state.options || []).forEach(function(o) {
-      ogRows.push([o.id, o.name, o.type, o.required, o.sortOrder, o.enabled]);
-    });
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(ogRows), 'OptionGroups');
-
-    // OptionItems
-    var oiRows = [['optionItemId', 'groupId', 'name', 'sortOrder', 'enabled']];
-    (state.options || []).forEach(function(option) {
-      (option.choices || []).forEach(function(choice, idx) {
-        oiRows.push([makeId('choice', option.id + '-' + choice, idx), option.id, choice, (idx + 1) * 10, true]);
-      });
-    });
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(oiRows), 'OptionItems');
-
-    // Products
-    var prodRows = [['productId', 'categoryId', 'name', 'description', 'price', 'soldOut', 'sortOrder', 'enabled', 'imageUrl']];
-    (state.items || []).forEach(function(p) {
-      prodRows.push([p.id, p.categoryId, p.name, p.description || '', p.price, p.soldOut, p.sortOrder, p.enabled, p.imageUrl || '']);
-    });
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(prodRows), 'Products');
-
-    // ProductOptions
-    var poRows = [['productId', 'groupId', 'sortOrder', 'enabled']];
-    (state.items || []).forEach(function(item) {
-      (item.customizationOptions || []).forEach(function(opt, idx) {
-        poRows.push([item.id, opt.id, (idx + 1) * 10, true]);
-      });
-    });
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(poRows), 'ProductOptions');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(sheets.categories), 'Categories');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(sheets.optionGroups), 'OptionGroups');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(sheets.optionItems), 'OptionItems');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(sheets.products), 'Products');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(sheets.productOptions), 'ProductOptions');
 
     var fileName = '藝素村菜單設定_' + new Date().toISOString().slice(0, 10) + '.xlsx';
     XLSX.writeFile(workbook, fileName);
     setMessage('success', '設定檔已下載：' + fileName);
+  }
+
+  function buildTemplateSheets(stateSource) {
+    var state = normalizeMenuState(stateSource || fullMenuState);
+    var catRows = [['categoryId', 'name', 'sortOrder', 'enabled']];
+    var ogRows = [['groupId', 'name', 'type', 'required', 'sortOrder', 'enabled']];
+    var oiRows = [['optionItemId', 'groupId', 'name', 'sortOrder', 'enabled']];
+    var prodRows = [['productId', 'categoryId', 'name', 'description', 'price', 'soldOut', 'sortOrder', 'enabled', 'imageUrl']];
+    var poRows = [['productId', 'groupId', 'sortOrder', 'enabled']];
+
+    (state.categories || []).forEach(function(c) {
+      catRows.push([c.id, c.name, c.sortOrder, c.enabled]);
+    });
+
+    (state.options || []).forEach(function(o) {
+      ogRows.push([o.id, o.name, o.type, o.required, o.sortOrder, o.enabled]);
+      (o.choices || []).forEach(function(choice, idx) {
+        oiRows.push([makeId('choice', o.id + '-' + choice, idx), o.id, choice, (idx + 1) * 10, true]);
+      });
+    });
+
+    (state.items || []).forEach(function(p) {
+      prodRows.push([p.id, p.categoryId, p.name, p.description || '', p.price, p.soldOut, p.sortOrder, p.enabled, p.imageUrl || '']);
+      (p.customizationOptions || []).forEach(function(opt, idx) {
+        poRows.push([p.id, opt.id, (idx + 1) * 10, true]);
+      });
+    });
+
+    return {
+      categories: catRows,
+      optionGroups: ogRows,
+      optionItems: oiRows,
+      products: prodRows,
+      productOptions: poRows
+    };
   }
 
   function previewImportWorkbook(workbook, currentState, xlsxApi) {
@@ -1465,7 +1467,8 @@ var AdminMenu = (function() {
       validateProductInput: validateProductInput,
       renderOptionCard: renderOptionCard,
       previewImportRows: previewImportRows,
-      applyImportPreview: applyImportPreview
+      applyImportPreview: applyImportPreview,
+      buildTemplateSheets: buildTemplateSheets
     }
   };
 })();
