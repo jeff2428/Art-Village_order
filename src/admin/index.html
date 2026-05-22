@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>藝素村 - 管理後台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="admin-config.js"></script>
+  <script src="admin-utils.js"></script>
+  <script src="admin-api.js"></script>
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script src="admin-menu.js"></script>
+  <script src="admin-schedule.js"></script>
+  <script src="admin-announcement.js"></script>
+  <script src="admin-orders.js"></script>
+  <script src="admin-discount.js"></script>
+  <script src="admin-employee.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <div class="flex min-h-screen">
+    <!-- 側邊導航 -->
+    <aside class="w-64 bg-gray-800 text-white">
+      <div class="p-4">
+        <h1 class="text-xl font-bold">藝素村管理後台</h1>
+      </div>
+      <nav class="mt-4">
+        <a href="#" data-section-link="menu" onclick="showSection('menu')" class="block px-4 py-2 hover:bg-gray-700">菜單管理</a>
+        <a href="#" data-section-link="schedule" onclick="showSection('schedule')" class="block px-4 py-2 hover:bg-gray-700">營業排程</a>
+        <a href="#" data-section-link="announcement" onclick="showSection('announcement')" class="block px-4 py-2 hover:bg-gray-700">公告管理</a>
+        <a href="#" data-section-link="orders" onclick="showSection('orders')" class="block px-4 py-2 hover:bg-gray-700">訂單歷史</a>
+        <a href="#" data-section-link="discount" onclick="showSection('discount')" class="block px-4 py-2 hover:bg-gray-700">折扣管理</a>
+        <a href="#" data-section-link="employee" onclick="showSection('employee')" class="block px-4 py-2 hover:bg-gray-700">員工管理</a>
+        <a href="#" data-section-link="auditlog" onclick="showSection('auditlog')" class="block px-4 py-2 hover:bg-gray-700">操作紀錄</a>
+      </nav>
+    </aside>
+
+    <!-- 主內容區 -->
+    <main class="flex-1 p-6 overflow-y-auto">
+      <!-- 菜單管理 -->
+      <section id="menuSection" class="hidden">
+        <div id="menuTabContent" class="bg-white rounded-lg p-6 shadow min-h-[500px]"></div>
+      </section>
+
+      <!-- 營業排程 -->
+      <section id="scheduleSection" class="hidden">
+        <h2 class="text-2xl font-bold mb-4">營業排程</h2>
+        <div id="scheduleMessage" class="hidden mb-4 rounded border px-4 py-3 text-sm" role="status"></div>
+        <div id="scheduleLoading" class="hidden space-y-4" aria-live="polite" aria-busy="true">
+          <div class="h-48 rounded bg-gray-200 animate-pulse"></div>
+          <div class="h-32 rounded bg-gray-200 animate-pulse"></div>
+        </div>
+        <div id="scheduleContent">
+        <div class="bg-white rounded-lg p-6 shadow">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold">每週營業時間</h3>
+            <button onclick="AdminSchedule.saveHours()" class="bg-green-500 text-white px-4 py-2 rounded">儲存設定</button>
+          </div>
+          <div id="weeklySchedule" class="space-y-4">
+            <!-- 動態生成週一到週日的設定 -->
+          </div>
+        </div>
+        <div class="bg-white rounded-lg p-6 shadow mt-4">
+          <h3 class="text-lg font-bold mb-3">休假日期</h3>
+          <div id="holidayList" class="space-y-2"></div>
+          <div class="flex gap-2 mt-3">
+            <input type="date" id="holidayDate" class="border rounded px-3 py-2">
+            <input type="text" id="holidayReason" placeholder="原因" class="border rounded px-3 py-2">
+            <button onclick="AdminSchedule.addHoliday()" class="bg-green-500 text-white px-4 py-2 rounded">新增</button>
+          </div>
+        </div>
+        </div>
+      </section>
+
+      <!-- 公告管理 -->
+      <section id="announcementSection" class="hidden">
+        <h2 class="text-2xl font-bold mb-4">公告管理</h2>
+        <div id="announcementMessage" class="hidden mb-4 rounded border px-4 py-3 text-sm" role="status"></div>
+        <div id="announcementLoading" class="hidden space-y-4" aria-live="polite" aria-busy="true">
+          <div class="h-32 rounded bg-gray-200 animate-pulse"></div>
+          <div class="h-32 rounded bg-gray-200 animate-pulse"></div>
+          <div class="h-32 rounded bg-gray-200 animate-pulse"></div>
+        </div>
+        <div id="announcementForm" class="space-y-4">
+          <div class="bg-white rounded-lg p-6 shadow">
+            <h3 class="text-lg font-bold mb-2">首頁公告</h3>
+            <textarea id="headerAnnouncement" rows="3" class="w-full border rounded px-3 py-2"></textarea>
+            <label class="flex items-center mt-2"><input type="checkbox" id="headerEnabled" class="mr-2"> 顯示</label>
+          </div>
+          <div class="bg-white rounded-lg p-6 shadow">
+            <h3 class="text-lg font-bold mb-2">彈窗公告</h3>
+            <textarea id="popupAnnouncement" rows="3" class="w-full border rounded px-3 py-2"></textarea>
+            <label class="flex items-center mt-2"><input type="checkbox" id="popupEnabled" class="mr-2"> 顯示</label>
+          </div>
+          <div class="bg-white rounded-lg p-6 shadow">
+            <h3 class="text-lg font-bold mb-2">結帳前公告</h3>
+            <textarea id="checkoutAnnouncement" rows="3" class="w-full border rounded px-3 py-2"></textarea>
+            <label class="flex items-center mt-2"><input type="checkbox" id="checkoutEnabled" class="mr-2"> 顯示</label>
+          </div>
+          <button onclick="AdminAnnouncement.saveAll()" class="bg-green-500 text-white px-4 py-2 rounded">儲存所有公告</button>
+        </div>
+      </section>
+
+      <!-- 訂單歷史 -->
+      <section id="ordersSection" class="hidden">
+        <div class="flex flex-col gap-3 mb-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 class="text-2xl font-bold">訂單歷史</h2>
+            <p id="ordersSummary" class="text-sm text-gray-500 mt-1"></p>
+          </div>
+          <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            <label class="block">
+              <span class="block text-xs text-gray-500 mb-1">開始日期</span>
+              <input type="date" id="orderStartDate" class="border rounded px-3 py-2 w-full">
+            </label>
+            <label class="block">
+              <span class="block text-xs text-gray-500 mb-1">結束日期</span>
+              <input type="date" id="orderEndDate" class="border rounded px-3 py-2 w-full">
+            </label>
+            <label class="block sm:col-span-2 lg:col-span-2">
+              <span class="block text-xs text-gray-500 mb-1">搜尋</span>
+              <input type="search" id="orderSearchInput" oninput="AdminOrders.setSearch(this.value)" placeholder="訂單編號、姓名、電話或餐點" class="border rounded px-3 py-2 w-full">
+            </label>
+            <button onclick="AdminOrders.loadOrders()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded self-end">查詢</button>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-2 mb-4" aria-label="訂單狀態篩選">
+          <button onclick="AdminOrders.filterByStatus('all')" id="filter-all" class="status-filter-btn bg-blue-500 text-white px-3 py-1 rounded text-sm">全部</button>
+          <button onclick="AdminOrders.filterByStatus('pending')" id="filter-pending" class="status-filter-btn bg-gray-200 text-gray-700 px-3 py-1 rounded text-sm">已成立</button>
+          <button onclick="AdminOrders.filterByStatus('confirmed')" id="filter-confirmed" class="status-filter-btn bg-gray-200 text-gray-700 px-3 py-1 rounded text-sm">已接單</button>
+          <button onclick="AdminOrders.filterByStatus('completed')" id="filter-completed" class="status-filter-btn bg-gray-200 text-gray-700 px-3 py-1 rounded text-sm">已完成</button>
+          <button onclick="AdminOrders.filterByStatus('cancelled')" id="filter-cancelled" class="status-filter-btn bg-gray-200 text-gray-700 px-3 py-1 rounded text-sm">已取消</button>
+        </div>
+        <div id="ordersError" class="hidden mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert"></div>
+        <div id="ordersLoading" class="hidden space-y-3" aria-live="polite" aria-busy="true">
+          <div class="h-24 rounded bg-gray-200 animate-pulse"></div>
+          <div class="h-24 rounded bg-gray-200 animate-pulse"></div>
+          <div class="h-24 rounded bg-gray-200 animate-pulse"></div>
+        </div>
+        <div id="ordersList" class="space-y-4"></div>
+        <div class="flex flex-col gap-3 mt-4 sm:flex-row sm:items-center sm:justify-between">
+          <label class="text-sm text-gray-600">
+            每頁
+            <select id="ordersPageSize" onchange="AdminOrders.setPageSize(this.value)" class="border rounded px-2 py-1 ml-1">
+              <option value="5">5</option>
+              <option value="10" selected>10</option>
+              <option value="20">20</option>
+            </select>
+            筆
+          </label>
+          <div id="ordersPagination" class="flex flex-wrap gap-2"></div>
+        </div>
+      </section>
+
+      <!-- 折扣管理 -->
+      <section id="discountSection" class="hidden">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-2xl font-bold">折扣管理</h2>
+          <button onclick="AdminDiscount.showAddForm()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded shadow flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            新增折扣
+          </button>
+        </div>
+        <div id="discountFormContainer" class="mb-4"></div>
+        <div id="discountList" class="space-y-4"></div>
+      </section>
+
+      <!-- 員工管理 -->
+      <section id="employeeSection" class="hidden">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-2xl font-bold">員工管理</h2>
+          <button onclick="AdminEmployee.showAddEmployeeForm()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded shadow flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            新增員工
+          </button>
+        </div>
+        <div id="employeeFormContainer" class="mb-4"></div>
+        <div id="employeeList" class="space-y-4"></div>
+      </section>
+
+      <!-- 操作紀錄 -->
+      <section id="auditlogSection" class="hidden">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-2xl font-bold">操作紀錄</h2>
+          <button onclick="AdminEmployee.loadAuditLog()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">重新整理</button>
+        </div>
+        <div id="auditLogList" class="space-y-4"></div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    function showSection(name) {
+      ['menu', 'schedule', 'announcement', 'orders', 'discount', 'employee', 'auditlog'].forEach(function(s) {
+        document.getElementById(s + 'Section').classList.add('hidden');
+      });
+      document.getElementById(name + 'Section').classList.remove('hidden');
+
+      var navLinks = document.querySelectorAll('[data-section-link]');
+      for (var i = 0; i < navLinks.length; i++) {
+        var isActive = navLinks[i].getAttribute('data-section-link') === name;
+        navLinks[i].className = isActive
+          ? 'block px-4 py-2 bg-gray-700 text-white border-l-4 border-blue-400'
+          : 'block px-4 py-2 hover:bg-gray-700';
+      }
+      
+      switch(name) {
+        case 'menu': AdminMenu.load(); break;
+        case 'schedule': AdminSchedule.load(); break;
+        case 'announcement': AdminAnnouncement.load(); break;
+        case 'orders': AdminOrders.loadOrders(); break;
+        case 'discount': AdminDiscount.load(); break;
+        case 'employee': AdminEmployee.loadEmployees(); break;
+        case 'auditlog': AdminEmployee.loadAuditLog(); break;
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      AdminEmployee.init();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>藝素村線上點餐</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="config.js"></script>
+  <script src="utils.js"></script>
+  <script src="liff-auth.js"></script>
+  <script src="api.js"></script>
+  <script src="menu.js"></script>
+  <script src="customization.js"></script>
+  <script src="reservation.js"></script>
+  <script src="announcement.js"></script>
+  <script src="order-submit.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    .category-tab.active { background-color: #06C755; color: white; }
+    .menu-item { transition: transform 0.1s; }
+    .menu-item:active { transform: scale(0.98); }
+    .loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.8); display: flex; align-items: center; justify-content: center; z-index: 50; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <!-- 載入中畫面 -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="text-center">
+      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto"></div>
+      <p class="mt-4 text-gray-600">載入中...</p>
+    </div>
+  </div>
+
+  <!-- 首頁公告 -->
+  <div id="headerAnnouncement" class="hidden bg-yellow-100 border-b border-yellow-200 px-4 py-3">
+    <p class="text-yellow-800 text-sm text-center"></p>
+  </div>
+
+  <!-- 彈出公告 -->
+  <div id="popupAnnouncement" class="hidden fixed inset-0 bg-black bg-opacity-50 z-40 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg p-6 max-w-sm w-full">
+      <h3 class="text-lg font-bold mb-3">公告</h3>
+      <p id="popupContent" class="text-gray-700 mb-4 whitespace-pre-line"></p>
+      <button onclick="closePopup()" class="w-full bg-green-500 text-white py-2 rounded-lg">我知道了</button>
+    </div>
+  </div>
+
+  <!-- 登入畫面 -->
+  <div id="loginScreen" class="hidden min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-lg p-8 w-full max-w-sm text-center">
+      <h1 class="text-2xl font-bold text-gray-800 mb-2">藝素村線上點餐</h1>
+      <p class="text-gray-500 mb-6">請使用 LINE 登入以開始點餐</p>
+      <button id="loginBtn" class="w-full bg-[#06C755] text-white py-3 rounded-lg font-medium flex items-center justify-center gap-2">
+        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M24 10.035c0 5.523-4.477 10-10 10s-10-4.477-10-10 4.477-10 10-10 10 4.477 10 10z"/></svg>
+        LINE 登入
+      </button>
+    </div>
+  </div>
+
+  <!-- 主點餐畫面 -->
+  <div id="mainScreen" class="hidden">
+    <!-- 頂部導航 -->
+    <header class="bg-white shadow-sm sticky top-0 z-30">
+      <div class="px-4 py-3 flex items-center justify-between">
+        <h1 class="text-lg font-bold text-gray-800">藝素村線上點餐</h1>
+        <div class="flex items-center gap-2">
+          <span id="userName" class="text-sm text-gray-600"></span>
+          <button onclick="handleLogout()" class="text-sm text-red-500">登出</button>
+        </div>
+      </div>
+      <!-- 分類標籤 -->
+      <div id="categoryTabs" class="flex overflow-x-auto px-4 pb-2 gap-2 scrollbar-hide">
+      </div>
+    </header>
+
+    <!-- 菜單列表 -->
+    <main id="menuContainer" class="px-4 py-4 pb-32">
+    </main>
+
+    <!-- 底部購物車 -->
+    <div id="cartBar" class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3 z-30">
+      <div id="cartItems" class="hidden max-h-48 overflow-y-auto mb-3 border-b border-gray-100 pb-2"></div>
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm text-gray-500">已選 <span id="cartCount">0</span> 項</p>
+          <p class="text-lg font-bold text-green-600">$<span id="cartTotal">0</span></p>
+        </div>
+        <button id="checkoutBtn" onclick="startCheckout()" class="bg-green-500 text-white px-6 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+          前往結帳
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 預約資訊表單 -->
+  <div id="reservationModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-40 flex items-end sm:items-center justify-center">
+    <div class="bg-white rounded-t-xl sm:rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6">
+      <h2 class="text-xl font-bold mb-4">預約資訊</h2>
+      <form id="reservationForm" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">訂位人姓名</label>
+          <input type="text" id="customerName" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">聯絡電話</label>
+          <input type="tel" id="customerPhone" required placeholder="09xxxxxxxx" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">用餐人數</label>
+          <input type="number" id="guestCount" required min="1" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">用餐日期</label>
+          <input type="date" id="diningDate" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">用餐時間</label>
+          <select id="diningTime" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
+            <option value="">請選擇</option>
+          </select>
+        </div>
+        <div class="flex gap-3 pt-4">
+          <button type="button" onclick="closeReservationModal()" class="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg">取消</button>
+          <button type="submit" class="flex-1 bg-green-500 text-white py-2 rounded-lg">確認</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 客製化選項彈窗 -->
+  <div id="customizationModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-40 flex items-end sm:items-center justify-center">
+    <div class="bg-white rounded-t-xl sm:rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6">
+      <h2 id="customizationTitle" class="text-xl font-bold mb-4"></h2>
+      <div id="customizationOptions" class="space-y-4"></div>
+      <div class="flex gap-3 pt-4">
+        <button onclick="closeCustomizationModal()" class="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg">取消</button>
+        <button id="confirmCustomization" class="flex-1 bg-green-500 text-white py-2 rounded-lg disabled:opacity-50" disabled>加入購物車</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 結帳前公告 -->
+  <div id="checkoutAnnouncement" class="hidden fixed inset-0 bg-black bg-opacity-50 z-40 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg p-6 max-w-sm w-full">
+      <h3 class="text-lg font-bold mb-3">訂單確認提醒</h3>
+      <p id="checkoutAnnouncementContent" class="text-gray-700 mb-4 whitespace-pre-line"></p>
+      <button onclick="confirmCheckout()" class="w-full bg-green-500 text-white py-2 rounded-lg">確認送出訂單</button>
+    </div>
+  </div>
+
+  <!-- 訂單成功畫面 -->
+  <div id="successScreen" class="hidden min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-lg p-8 w-full max-w-sm text-center">
+      <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+        <svg class="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+      </div>
+      <h2 class="text-xl font-bold text-gray-800 mb-2">訂單已送出</h2>
+      <p class="text-gray-500 mb-2">訂單編號</p>
+      <p id="orderIdDisplay" class="text-lg font-mono font-bold text-green-600 mb-4"></p>
+      <div id="orderSummaryDisplay" class="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 mb-4 text-left"></div>
+      <p class="text-sm text-gray-500 mb-2">本訂單採現場結帳。</p>
+      <p class="text-xs text-gray-500 mb-6">訂單送出後不可自行修改或取消，如需調整請致電或透過官方 LINE 聯繫。</p>
+      <button onclick="resetOrder()" class="w-full bg-green-500 text-white py-3 rounded-lg">返回首頁</button>
+    </div>
+  </div>
+
+  <script>
+    // 全域狀態
+    var appState = {
+      menuData: null,
+      cart: [],
+      reservation: null,
+      currentItem: null,
+      currentCustomizations: {},
+      visibleItems: []
+    };
+
+    // 菜單自動重新整理機制
+    var menuRefreshInterval = null;
+    var MENU_REFRESH_MS = 5 * 60 * 1000; // 5 分鐘
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', function() {
+      initApp();
+    });
+
+    async function initApp() {
+      try {
+        await LiffAuth.init('2010115975-kU7jv0Ek');
+        
+        if (!LiffAuth.isLoggedIn()) {
+          showLoginScreen();
+        } else {
+          await loadMainScreen();
+          startMenuAutoRefresh();
+          setupVisibilityRefresh();
+        }
+      } catch (err) {
+        showError('初始化失敗: ' + err.message);
+      }
+    }
+
+    function startMenuAutoRefresh() {
+      if (menuRefreshInterval) {
+        clearInterval(menuRefreshInterval);
+      }
+      menuRefreshInterval = setInterval(function() {
+        refreshMenuData();
+      }, MENU_REFRESH_MS);
+    }
+
+    function setupVisibilityRefresh() {
+      document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') {
+          refreshMenuData();
+        }
+      });
+
+      window.addEventListener('focus', function() {
+        refreshMenuData();
+      });
+    }
+
+    async function refreshMenuData() {
+      try {
+        var newMenuData = await Api.getMenu();
+        if (JSON.stringify(newMenuData) !== JSON.stringify(appState.menuData)) {
+          appState.menuData = newMenuData;
+          Menu.init(appState.menuData);
+          renderCategories();
+          var currentCat = Menu.getCurrentCategory();
+          if (currentCat) {
+            renderMenuItems(currentCat);
+          }
+          showRefreshNotice('菜單已更新');
+        }
+      } catch (err) {
+        console.log('菜單重新整理失敗: ' + err.message);
+      }
+    }
+
+    function showRefreshNotice(message) {
+      var notice = document.createElement('div');
+      notice.className = 'fixed top-16 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-4 py-2 rounded-full text-sm shadow-lg z-50 transition-opacity duration-300';
+      notice.textContent = message;
+      document.body.appendChild(notice);
+      setTimeout(function() {
+        notice.style.opacity = '0';
+        setTimeout(function() {
+          document.body.removeChild(notice);
+        }, 300);
+      }, 2000);
+    }
+
+    async function initApp() {
+      try {
+        await LiffAuth.init('2010115975-kU7jv0Ek');
+        
+        if (!LiffAuth.isLoggedIn()) {
+          showLoginScreen();
+        } else {
+          await loadMainScreen();
+        }
+      } catch (err) {
+        showError('初始化失敗: ' + err.message);
+      }
+    }
+
+    function showLoginScreen() {
+      hideLoading();
+      document.getElementById('loginScreen').classList.remove('hidden');
+      document.getElementById('loginBtn').addEventListener('click', function() {
+        LiffAuth.login();
+      });
+    }
+
+    async function loadMainScreen() {
+      showLoading();
+      
+      try {
+        var profile = await LiffAuth.getProfile();
+        document.getElementById('userName').textContent = profile.displayName;
+        
+        appState.menuData = await Api.getMenu();
+        Menu.init(appState.menuData);
+        renderCategories();
+        renderMenuItems(Menu.getCurrentCategory());
+        
+        await loadAnnouncements();
+        var businessHours = await Api.getBusinessHours();
+        Reservation.init(businessHours, function() {
+          Announcement.showCheckoutAnnouncement(function() {
+            OrderSubmit.submit();
+          });
+        });
+        setupCustomizationActions();
+        
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('mainScreen').classList.remove('hidden');
+        
+      } catch (err) {
+        showError('載入失敗: ' + err.message);
+      } finally {
+        hideLoading();
+      }
+    }
+
+    function renderCategories() {
+      var container = document.getElementById('categoryTabs');
+      container.innerHTML = '';
+      if (!appState.menuData.categories || appState.menuData.categories.length === 0) {
+        return;
+      }
+      
+      appState.menuData.categories.forEach(function(cat, idx) {
+        var btn = document.createElement('button');
+        btn.className = 'category-tab px-4 py-2 rounded-full text-sm whitespace-nowrap bg-gray-100 text-gray-700' + (idx === 0 ? ' active' : '');
+        btn.textContent = cat;
+        btn.onclick = function() {
+          document.querySelectorAll('.category-tab').forEach(function(t) { t.classList.remove('active'); });
+          btn.classList.add('active');
+          Menu.setCurrentCategory(cat);
+          renderMenuItems(cat);
+        };
+        container.appendChild(btn);
+      });
+    }
+
+    function renderMenuItems(category) {
+      var container = document.getElementById('menuContainer');
+      container.innerHTML = '';
+      
+      var items = Menu.getItemsByCategory(appState.menuData, category);
+      appState.visibleItems = items;
+      if (items.length === 0) {
+        container.innerHTML = '<div class="text-center text-gray-500 py-10">目前沒有可點選餐點</div>';
+        return;
+      }
+      
+      items.forEach(function(item, idx) {
+        var card = document.createElement('div');
+        card.className = 'menu-item bg-white rounded-lg shadow-sm p-4 mb-3';
+        var imageHtml = item.imageUrl
+          ? '<img src="' + escapeAttribute(item.imageUrl) + '" alt="' + escapeAttribute(item.name) + '" class="w-20 h-20 object-cover rounded-lg border border-gray-100 bg-gray-50 mr-3 flex-shrink-0">'
+          : '';
+        card.innerHTML = 
+          '<div class="flex justify-between items-start">' +
+            '<div class="flex items-start min-w-0">' +
+              imageHtml +
+              '<div class="min-w-0">' +
+                '<h3 class="font-bold text-gray-800">' + escapeHtml(item.name) + '</h3>' +
+                '<p class="text-sm text-gray-500 mt-1">' + escapeHtml(item.description || '') + '</p>' +
+                '<p class="text-green-600 font-bold mt-2">$' + escapeHtml(item.price) + '</p>' +
+              '</div>' +
+            '</div>' +
+            '<button onclick="openCustomization(' + idx + ')" class="bg-green-500 text-white px-4 py-2 rounded-lg text-sm">選擇</button>' +
+          '</div>';
+        container.appendChild(card);
+      });
+    }
+
+    function setupCustomizationActions() {
+      var confirmBtn = document.getElementById('confirmCustomization');
+      if (confirmBtn.dataset.bound === 'true') {
+        return;
+      }
+      confirmBtn.dataset.bound = 'true';
+      confirmBtn.addEventListener('click', function() {
+        var result = Customization.confirm();
+        if (!result) {
+          return;
+        }
+        Menu.addToCart(result.item, result.customizations);
+        updateCartBar();
+      });
+    }
+
+    function openCustomization(index) {
+      var item = appState.visibleItems[index];
+      if (!item) {
+        showError('找不到餐點資料');
+        return;
+      }
+      Customization.open(item);
+    }
+
+    function closeCustomizationModal() {
+      Customization.close();
+    }
+
+    function updateCartBar() {
+      var count = Menu.getCartCount();
+      document.getElementById('cartCount').textContent = count;
+      document.getElementById('cartTotal').textContent = Menu.getCartTotal();
+      document.getElementById('checkoutBtn').disabled = count === 0;
+      renderCartItems();
+    }
+
+    function renderCartItems() {
+      var container = document.getElementById('cartItems');
+      var items = Menu.getCartItems();
+      container.innerHTML = '';
+
+      if (items.length === 0) {
+        container.classList.add('hidden');
+        return;
+      }
+
+      container.classList.remove('hidden');
+      items.forEach(function(cartItem) {
+        var item = cartItem.item;
+        var customizations = cartItem.customizations || [];
+        var customizationText = customizations.length > 0
+          ? Customization.formatCustomizations(customizations)
+          : '無客製化';
+        var decreaseAction = escapeAttribute("decreaseCartItem('" + escapeJsString(cartItem.key) + "')");
+        var increaseAction = escapeAttribute("increaseCartItem('" + escapeJsString(cartItem.key) + "')");
+        var removeAction = escapeAttribute("removeCartItem('" + escapeJsString(cartItem.key) + "')");
+        var row = document.createElement('div');
+        row.className = 'flex items-center justify-between gap-3 py-2 text-sm';
+        row.innerHTML =
+          '<div class="min-w-0">' +
+            '<p class="font-medium text-gray-800 truncate">' + escapeHtml(item.name) + '</p>' +
+            '<p class="text-xs text-gray-500 truncate">' + escapeHtml(customizationText) + '</p>' +
+          '</div>' +
+          '<div class="flex items-center gap-2 shrink-0">' +
+            '<button onclick="' + decreaseAction + '" class="w-7 h-7 rounded-full border border-gray-300 text-gray-700">-</button>' +
+            '<span class="w-5 text-center">' + escapeHtml(cartItem.quantity) + '</span>' +
+            '<button onclick="' + increaseAction + '" class="w-7 h-7 rounded-full border border-gray-300 text-gray-700">+</button>' +
+            '<button onclick="' + removeAction + '" class="text-red-500 text-xs">移除</button>' +
+          '</div>';
+        container.appendChild(row);
+      });
+    }
+
+    function increaseCartItem(cartKey) {
+      Menu.increaseCartItem(cartKey);
+      updateCartBar();
+    }
+
+    function decreaseCartItem(cartKey) {
+      Menu.removeFromCart(cartKey);
+      updateCartBar();
+    }
+
+    function removeCartItem(cartKey) {
+      Menu.removeCartItem(cartKey);
+      updateCartBar();
+    }
+
+    function startCheckout() {
+      if (Menu.getCartCount() === 0) {
+        return;
+      }
+      Reservation.open();
+    }
+
+    function closeReservationModal() {
+      Reservation.close();
+    }
+
+    function loadAnnouncements() {
+      return Announcement.load();
+    }
+
+    function closePopup() {
+      Announcement.closePopup();
+    }
+
+    function confirmCheckout() {
+      Announcement.confirmCheckout();
+    }
+
+    function resetOrder() {
+      OrderSubmit.reset();
+    }
+
+    function handleLogout() {
+      LiffAuth.logout();
+      location.reload();
+    }
+
+    function showLoading() { document.getElementById('loadingOverlay').classList.remove('hidden'); }
+    function hideLoading() { document.getElementById('loadingOverlay').classList.add('hidden'); }
+    function showError(msg) { hideLoading(); alert(msg); }
+  </script>
+</body>
+</html>
