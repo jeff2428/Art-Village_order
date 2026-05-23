@@ -3,24 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>藝素村線上點餐</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-  <script src="config.js"></script>
-  <script src="utils.js"></script>
-  <script src="liff-auth.js"></script>
-  <script src="api.js"></script>
-  <script src="menu.js"></script>
-  <script src="customization.js"></script>
-  <script src="reservation.js"></script>
-  <script src="announcement.js"></script>
-  <script src="order-submit.js"></script>
+  <title>星空x藝素村線上點餐</title>
+  <link rel="preconnect" href="https://static.line-scdn.net">
+  <link rel="preconnect" href="https://cdn.tailwindcss.com">
+  <link rel="preconnect" href="https://script.google.com">
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; }
+    .hidden { display: none !important; }
     .category-tab.active { background-color: #06C755; color: white; }
     .menu-item { transition: transform 0.1s; }
     .menu-item:active { transform: scale(0.98); }
     .loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.8); display: flex; align-items: center; justify-content: center; z-index: 50; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-spinner { animation: spin 1s linear infinite; border-radius: 9999px; height: 3rem; width: 3rem; border-bottom: 2px solid #06C755; margin: 0 auto; }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -28,7 +23,7 @@
   <!-- 載入中畫面 -->
   <div id="loadingOverlay" class="loading-overlay">
     <div class="text-center">
-      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto"></div>
+      <div class="loading-spinner animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto"></div>
       <p class="mt-4 text-gray-600">載入中...</p>
     </div>
   </div>
@@ -50,7 +45,7 @@
   <!-- 登入畫面 -->
   <div id="loginScreen" class="hidden min-h-screen flex items-center justify-center p-4">
     <div class="bg-white rounded-xl shadow-lg p-8 w-full max-w-sm text-center">
-      <h1 class="text-2xl font-bold text-gray-800 mb-2">藝素村線上點餐</h1>
+      <h1 class="text-2xl font-bold text-gray-800 mb-2">星空x藝素村線上點餐</h1>
       <p class="text-gray-500 mb-6">請使用 LINE 登入以開始點餐</p>
       <button id="loginBtn" class="w-full bg-[#06C755] text-white py-3 rounded-lg font-medium flex items-center justify-center gap-2">
         <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M24 10.035c0 5.523-4.477 10-10 10s-10-4.477-10-10 4.477-10 10-10 10 4.477 10 10z"/></svg>
@@ -59,12 +54,121 @@
     </div>
   </div>
 
+  <!-- 訂位頁面 -->
+  <div id="reservationScreen" class="hidden min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-lg p-8 w-full max-w-sm">
+      <h1 class="text-2xl font-bold text-gray-800 mb-6">訂位資訊</h1>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">用餐日期</label>
+          <input type="date" id="diningDate" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">用餐時間</label>
+          <select id="diningTime" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
+            <option value="">請先選擇日期</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">訂位代表</label>
+          <input type="text" id="representativeName" readonly
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100 cursor-not-allowed">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">訂位人姓名</label>
+          <input type="text" id="customerName" required class="w-full border border-gray-300 rounded-lg px-3 py-2">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">聯絡電話</label>
+          <input type="tel" id="customerPhone" required placeholder="09xxxxxxxx" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">總人數</label>
+          <input type="number" id="guestCount" required min="1" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+        </div>
+        <div class="flex gap-3 pt-4">
+          <button type="button" id="queryOrderBtn"
+                  class="flex-1 border border-blue-500 text-blue-500 py-3 rounded-lg font-medium text-sm">
+            查詢訂單
+          </button>
+          <button type="button" id="dineInBtn"
+                  class="flex-1 bg-green-500 text-white py-3 rounded-lg font-medium text-sm">
+            現場點餐
+          </button>
+          <button type="button" id="preOrderBtn"
+                  class="flex-1 bg-[#06C755] text-white py-3 rounded-lg font-medium text-sm">
+            線上預點餐
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 訂位完成畫面 -->
+  <div id="reservationCompleteScreen" class="hidden min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-lg p-8 w-full max-w-sm text-center">
+      <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+        <svg class="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+      </div>
+      <h2 class="text-xl font-bold text-gray-800 mb-2">訂位完成</h2>
+      <p class="text-gray-500 mb-4">我們已收到您的訂位資訊</p>
+      <div id="reservationSummary" class="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 mb-6 text-left"></div>
+      <button onclick="resetToHome()" class="w-full bg-green-500 text-white py-3 rounded-lg">返回首頁</button>
+    </div>
+  </div>
+
+  <!-- 我的訂單彈窗 -->
+  <div id="myOrdersModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-end sm:items-center justify-center">
+    <div class="bg-white rounded-t-xl sm:rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div class="p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-xl font-bold">我的訂單</h2>
+          <button onclick="Reservation.closeMyOrders()" class="text-gray-400 hover:text-gray-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        <div id="ordersLoading" class="text-center py-8">
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto"></div>
+          <p class="mt-2 text-gray-500">載入中...</p>
+        </div>
+        <div id="ordersError" class="hidden text-center py-8 text-red-500"></div>
+        <div id="ordersList" class="hidden space-y-3"></div>
+        <div id="ordersEmpty" class="hidden text-center py-8 text-gray-500">
+          <p>尚無訂單紀錄</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 備註編輯彈窗 -->
+  <div id="noteEditModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg p-6 max-w-sm w-full">
+      <h3 class="text-lg font-bold mb-3">編輯備註</h3>
+      <p id="noteItemName" class="text-sm text-gray-600 mb-2"></p>
+      <textarea id="noteEditInput" maxlength="50" rows="2"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 mb-2"
+                placeholder="輸入備註（最多 50 字）"></textarea>
+      <div class="flex justify-between items-center mb-4">
+        <span id="noteCharCount" class="text-xs text-gray-400">0/50</span>
+        <button onclick="clearNote()" class="text-xs text-red-500">清除備註</button>
+      </div>
+      <div class="flex gap-3">
+        <button onclick="closeNoteEdit()" class="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg">取消</button>
+        <button onclick="saveNoteEdit()" class="flex-1 bg-green-500 text-white py-2 rounded-lg">儲存</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 主點餐畫面 -->
   <div id="mainScreen" class="hidden">
     <!-- 頂部導航 -->
     <header class="bg-white shadow-sm sticky top-0 z-30">
       <div class="px-4 py-3 flex items-center justify-between">
-        <h1 class="text-lg font-bold text-gray-800">藝素村線上點餐</h1>
+        <h1 class="text-lg font-bold text-gray-800">星空x藝素村線上點餐</h1>
         <div class="flex items-center gap-2">
           <span id="userName" class="text-sm text-gray-600"></span>
           <button onclick="handleLogout()" class="text-sm text-red-500">登出</button>
@@ -87,9 +191,15 @@
           <p class="text-sm text-gray-500">已選 <span id="cartCount">0</span> 項</p>
           <p class="text-lg font-bold text-green-600">$<span id="cartTotal">0</span></p>
         </div>
-        <button id="checkoutBtn" onclick="startCheckout()" class="bg-green-500 text-white px-6 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-          前往結帳
-        </button>
+        <div class="flex items-center gap-2">
+          <button id="shareBtn" onclick="shareOrder()"
+                  class="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm border border-gray-200">
+            分享
+          </button>
+          <button id="checkoutBtn" onclick="startCheckout()" class="bg-green-500 text-white px-6 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+            前往結帳
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -166,6 +276,9 @@
     </div>
   </div>
 
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js" defer></script>
+  <script src="dist/bundle.js" defer></script>
   <script>
     // 全域狀態
     var appState = {
@@ -181,10 +294,30 @@
     var menuRefreshInterval = null;
     var MENU_REFRESH_MS = 5 * 60 * 1000; // 5 分鐘
 
+    var _preloaded = null;
+
     // 初始化
     document.addEventListener('DOMContentLoaded', function() {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js').catch(function(err) {
+          console.log('SW 註冊失敗:', err);
+        });
+      }
       initApp();
     });
+
+    async function preloadAllData() {
+      try {
+        var data = await Api.getInitialData();
+        _preloaded = {
+          menuData: data.menu,
+          announcements: data.announcements,
+          businessHours: data.businessHours
+        };
+      } catch (err) {
+        console.log('背景預載失敗:', err.message);
+      }
+    }
 
     async function initApp() {
       try {
@@ -192,11 +325,32 @@
         
         if (!LiffAuth.isLoggedIn()) {
           showLoginScreen();
-        } else {
-          await loadMainScreen();
-          startMenuAutoRefresh();
-          setupVisibilityRefresh();
+          return;
         }
+
+        var sharedBy = Reservation.parseSharedBy();
+        Reservation.openReservationScreen();
+
+        if (sharedBy) {
+          Reservation.setLockedRepresentative(sharedBy);
+        } else {
+          var displayName = LiffAuth.getDisplayName() || '';
+          Reservation.setLockedRepresentative(displayName);
+        }
+
+        document.getElementById('customerName').value = LiffAuth.getDisplayName() || '';
+
+        preloadAllData();
+
+        var businessHours = _preloaded ? _preloaded.businessHours : await Api.getBusinessHours();
+        Reservation.init(businessHours, null);
+        Reservation.setupDineInAction();
+        Reservation.setupPreOrderAction();
+        Reservation.setupQueryOrderAction();
+        setupCustomizationActions();
+
+        hideLoading();
+
       } catch (err) {
         showError('初始化失敗: ' + err.message);
       }
@@ -254,20 +408,6 @@
       }, 2000);
     }
 
-    async function initApp() {
-      try {
-        await LiffAuth.init('2010115975-kU7jv0Ek');
-        
-        if (!LiffAuth.isLoggedIn()) {
-          showLoginScreen();
-        } else {
-          await loadMainScreen();
-        }
-      } catch (err) {
-        showError('初始化失敗: ' + err.message);
-      }
-    }
-
     function showLoginScreen() {
       hideLoading();
       document.getElementById('loginScreen').classList.remove('hidden');
@@ -282,23 +422,33 @@
       try {
         var profile = await LiffAuth.getProfile();
         document.getElementById('userName').textContent = profile.displayName;
+
+        var menuData, announcements;
+        if (_preloaded) {
+          menuData = _preloaded.menuData;
+          announcements = _preloaded.announcements;
+          _preloaded = null;
+        } else {
+          var results = await Promise.all([
+            Api.getMenu(),
+            Api.getAnnouncements()
+          ]);
+          menuData = results[0];
+          announcements = results[1];
+        }
         
-        appState.menuData = await Api.getMenu();
+        appState.menuData = menuData;
         Menu.init(appState.menuData);
         renderCategories();
         renderMenuItems(Menu.getCurrentCategory());
         
-        await loadAnnouncements();
-        var businessHours = await Api.getBusinessHours();
-        Reservation.init(businessHours, function() {
-          Announcement.showCheckoutAnnouncement(function() {
-            OrderSubmit.submit();
-          });
-        });
-        setupCustomizationActions();
+        Announcement.setData(announcements);
+        Announcement.renderHeader();
+        Announcement.renderPopup();
         
-        document.getElementById('loginScreen').classList.add('hidden');
-        document.getElementById('mainScreen').classList.remove('hidden');
+        setupCustomizationActions();
+        startMenuAutoRefresh();
+        setupVisibilityRefresh();
         
       } catch (err) {
         showError('載入失敗: ' + err.message);
@@ -343,7 +493,7 @@
         var card = document.createElement('div');
         card.className = 'menu-item bg-white rounded-lg shadow-sm p-4 mb-3';
         var imageHtml = item.imageUrl
-          ? '<img src="' + escapeAttribute(item.imageUrl) + '" alt="' + escapeAttribute(item.name) + '" class="w-20 h-20 object-cover rounded-lg border border-gray-100 bg-gray-50 mr-3 flex-shrink-0">'
+          ? '<img src="' + escapeAttribute(item.imageUrl) + '" alt="' + escapeAttribute(item.name) + '" width="80" height="80" loading="lazy" decoding="async" class="w-20 h-20 object-cover rounded-lg border border-gray-100 bg-gray-50 mr-3 flex-shrink-0">'
           : '';
         card.innerHTML = 
           '<div class="flex justify-between items-start">' +
@@ -372,7 +522,7 @@
         if (!result) {
           return;
         }
-        Menu.addToCart(result.item, result.customizations);
+        Menu.addToCart(result.item, result.customizations, result.note);
         updateCartBar();
       });
     }
@@ -415,8 +565,12 @@
         var customizationText = customizations.length > 0
           ? Customization.formatCustomizations(customizations)
           : '無客製化';
+        var noteText = cartItem.note
+          ? '<p class="text-xs text-orange-600 truncate">📝 ' + escapeHtml(cartItem.note) + '</p>'
+          : '';
         var decreaseAction = escapeAttribute("decreaseCartItem('" + escapeJsString(cartItem.key) + "')");
         var increaseAction = escapeAttribute("increaseCartItem('" + escapeJsString(cartItem.key) + "')");
+        var editNoteAction = escapeAttribute("editCartItemNote('" + escapeJsString(cartItem.key) + "')");
         var removeAction = escapeAttribute("removeCartItem('" + escapeJsString(cartItem.key) + "')");
         var row = document.createElement('div');
         row.className = 'flex items-center justify-between gap-3 py-2 text-sm';
@@ -424,8 +578,10 @@
           '<div class="min-w-0">' +
             '<p class="font-medium text-gray-800 truncate">' + escapeHtml(item.name) + '</p>' +
             '<p class="text-xs text-gray-500 truncate">' + escapeHtml(customizationText) + '</p>' +
+            noteText +
           '</div>' +
-          '<div class="flex items-center gap-2 shrink-0">' +
+          '<div class="flex items-center gap-1 shrink-0">' +
+            '<button onclick="' + editNoteAction + '" class="w-7 h-7 rounded-full border border-gray-200 text-blue-500 text-xs">📝</button>' +
             '<button onclick="' + decreaseAction + '" class="w-7 h-7 rounded-full border border-gray-300 text-gray-700">-</button>' +
             '<span class="w-5 text-center">' + escapeHtml(cartItem.quantity) + '</span>' +
             '<button onclick="' + increaseAction + '" class="w-7 h-7 rounded-full border border-gray-300 text-gray-700">+</button>' +
@@ -454,7 +610,13 @@
       if (Menu.getCartCount() === 0) {
         return;
       }
-      Reservation.open();
+      if (!Reservation.getData()) {
+        alert('請先至訂位頁面填寫訂位資訊');
+        return;
+      }
+      Announcement.showCheckoutAnnouncement(function() {
+        OrderSubmit.submit();
+      });
     }
 
     function closeReservationModal() {
@@ -481,6 +643,104 @@
       LiffAuth.logout();
       location.reload();
     }
+
+    function resetToHome() {
+      Reservation.reset();
+      Menu.clearCart();
+      document.getElementById('reservationCompleteScreen').classList.add('hidden');
+      document.getElementById('successScreen').classList.add('hidden');
+      document.getElementById('mainScreen').classList.add('hidden');
+      location.reload();
+    }
+
+    function hideAllScreens() {
+      var screens = ['loginScreen', 'reservationScreen', 'mainScreen',
+        'successScreen', 'reservationCompleteScreen', 'myOrdersModal'];
+      screens.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+      });
+    }
+
+    function shareOrder() {
+      var representative = document.getElementById('representativeName').value;
+      if (!representative) {
+        alert('無法取得訂位代表姓名');
+        return;
+      }
+      var baseUrl = window.location.origin + window.location.pathname;
+      var shareUrl = baseUrl + '?sharedBy=' + encodeURIComponent(representative);
+
+      if (navigator.share) {
+        navigator.share({
+          title: '星空x藝素村線上點餐',
+          url: shareUrl
+        }).catch(function() {
+          copyToClipboard(shareUrl);
+        });
+      } else {
+        copyToClipboard(shareUrl);
+      }
+    }
+
+    function copyToClipboard(text) {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(function() {
+          alert('分享網址已複製，貼給朋友開啟即可');
+        });
+      } else {
+        prompt('請複製以下連結分享給朋友：', text);
+      }
+    }
+
+    var currentEditKey = null;
+
+    function editCartItemNote(cartKey) {
+      currentEditKey = cartKey;
+      var cartItem = Menu.getCartItem(cartKey);
+      if (!cartItem) return;
+
+      document.getElementById('noteItemName').textContent = cartItem.item.name;
+      document.getElementById('noteEditInput').value = cartItem.note || '';
+      updateNoteCharCount();
+      document.getElementById('noteEditModal').classList.remove('hidden');
+    }
+
+    function saveNoteEdit() {
+      var note = document.getElementById('noteEditInput').value.trim();
+      var cartItem = Menu.getCartItem(currentEditKey);
+      if (cartItem) {
+        cartItem.note = note;
+        Menu.saveCart();
+        updateCartBar();
+      }
+      document.getElementById('noteEditModal').classList.add('hidden');
+      currentEditKey = null;
+    }
+
+    function clearNote() {
+      document.getElementById('noteEditInput').value = '';
+      updateNoteCharCount();
+    }
+
+    function updateNoteCharCount() {
+      var input = document.getElementById('noteEditInput');
+      var count = document.getElementById('noteCharCount');
+      if (input && count) {
+        count.textContent = input.value.length + '/50';
+      }
+    }
+
+    function closeNoteEdit() {
+      document.getElementById('noteEditModal').classList.add('hidden');
+      currentEditKey = null;
+    }
+
+    document.addEventListener('input', function(e) {
+      if (e.target && e.target.id === 'noteEditInput') {
+        updateNoteCharCount();
+      }
+    });
 
     function showLoading() { document.getElementById('loadingOverlay').classList.remove('hidden'); }
     function hideLoading() { document.getElementById('loadingOverlay').classList.add('hidden'); }

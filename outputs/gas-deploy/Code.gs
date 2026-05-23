@@ -1,5 +1,5 @@
 /**
- * 藝素村點餐系統 - Google Apps Script 部署檔
+ * 星空x藝素村點餐系統 - Google Apps Script 部署檔
  * 由 src/gas 模組合併產生。
  * 請整份貼到 Apps Script 的 Code.gs。
  */
@@ -44,6 +44,23 @@ function doGet(e) {
           data: getBusinessHours(spreadsheetId)
         };
         break;
+      case 'getOrdersByUserId':
+        var liffUserId = params.liffUserId || params.userId;
+        result = {
+          success: true,
+          data: getOrdersByLiffUserId(spreadsheetId, liffUserId)
+        };
+        break;
+      case 'getInitialData':
+        result = {
+          success: true,
+          data: {
+            menu: getFullMenuData(spreadsheetId),
+            announcements: getAnnouncements(spreadsheetId),
+            businessHours: getBusinessHours(spreadsheetId)
+          }
+        };
+        break;
       default:
         result = createUnknownActionResult(action);
     }
@@ -67,6 +84,18 @@ function doPost(e) {
       case 'order':
       case 'submitOrder':
         return createJsonResponse(processOrder(requestData.data || requestData.order || {}));
+      case 'sendReservation':
+        var resResult = sendReservationNotification(requestData.data || {});
+        return createJsonResponse({
+          success: resResult.success,
+          message: resResult.success ? '訂位通知已送出' : '訂位通知送出失敗'
+        });
+      case 'sendOrder':
+        var orderResult = sendOrderNotificationForCustomer(requestData.data || {});
+        return createJsonResponse({
+          success: orderResult.success,
+          message: orderResult.success ? '訂單通知已送出' : '訂單通知送出失敗'
+        });
       default:
         if (typeof handleAdminPost === 'function' && action) {
           return handleAdminPost(e);
@@ -2956,6 +2985,125 @@ function findColumnIndex(headers, columnName) {
   return -1;
 }
 
+/**
+ * 依 LIFF userId 查詢訂單（客戶端用）
+ * @param {string} spreadsheetId - Google Sheet 的 ID
+ * @param {string} liffUserId - LINE userId
+ * @returns {Array<Object>} 訂單資料陣列
+ */
+function getOrdersByLiffUserId(spreadsheetId, liffUserId) {
+  try {
+    var ss = SpreadsheetApp.openById(spreadsheetId);
+    var ordersSheet = ss.getSheetByName('Orders');
+    
+    if (!ordersSheet) {
+      return [];
+    }
+    
+    var data = ordersSheet.getDataRange().getValues();
+    var orderItemsSheet = ss.getSheetByName('OrderItems');
+    
+    var itemsByOrderId = {};
+    if (orderItemsSheet) {
+      var itemData = orderItemsSheet.getDataRange().getValues();
+      for (var i = 1; i < itemData.length; i++) {
+        var orderId = itemData[i][0];
+        if (!itemsByOrderId[orderId]) itemsByOrderId[orderId] = [];
+        itemsByOrderId[orderId].push({
+          name: itemData[i][1],
+          quantity: itemData[i][2],
+          price: itemData[i][3],
+          customizationDetails: itemData[i][4],
+          lineTotal: itemData[i][5]
+        });
+      }
+    }
+    
+    var orders = [];
+    for (var j = 1; j < data.length; j++) {
+      var row = data[j];
+      if (row[2] === liffUserId) {
+        orders.push({
+          orderId: row[0],
+          timestamp: row[1],
+          customerName: row[3],
+          phone: row[4],
+          guestCount: row[5],
+          diningDate: row[6],
+          diningTime: row[7],
+          totalAmount: row[8],
+          status: row[9],
+          orderItems: itemsByOrderId[row[0]] || []
+        });
+      }
+    }
+    
+    return orders;
+    
+  } catch (e) {
+    Logger.log('getOrdersByLiffUserId 錯誤: ' + e.toString());
+    return [];
+  }
+}
+
+/**
+ * 發送訂位通知至 LINE 群組
+ * @param {Object} data - 訂位資料
+ * @returns {Object} 發送結果
+ */
+function sendReservationNotification(data) {
+  var message = '📋 新訂位通知\n' +
+    '━━━━━━━━━━━━━━━\n' +
+    '訂位代表：' + (data.representative || '未填寫') + '\n' +
+    '訂位人：' + (data.customerName || '未填寫') + '\n' +
+    '電話：' + (data.phone || '未填寫') + '\n' +
+    '人數：' + (data.guestCount || '?') + '人\n' +
+    '日期：' + (data.diningDate || '未填寫') + '\n' +
+    '時間：' + (data.diningTime || '未填寫');
+  
+  return sendLineMessage(message);
+}
+
+/**
+ * 發送訂單通知至 LINE 群組（含備註）
+ * @param {Object} data - 訂單資料
+ * @returns {Object} 發送結果
+ */
+function sendOrderNotificationForCustomer(data) {
+  var itemsText = '';
+  if (data.items && data.items.length > 0) {
+    var itemLines = [];
+    for (var i = 0; i < data.items.length; i++) {
+      var item = data.items[i];
+      var line = '  ' + item.name + ' x' + item.quantity;
+      if (item.customizations && item.customizations.length > 0) {
+        var customText = item.customizations.map(function(c) {
+          return c.optionName + ': ' + c.selectedValue;
+        }).join(' / ');
+        line += '\n    選項：' + customText;
+      }
+      if (item.note) {
+        line += '\n    備註：' + item.note;
+      }
+      itemLines.push(line);
+    }
+    itemsText = itemLines.join('\n\n');
+  }
+  
+  var message = '🍽️ 新訂單通知\n' +
+    '━━━━━━━━━━━━━━━\n' +
+    '訂單編號：' + (data.orderId || '未產生') + '\n' +
+    '訂位代表：' + (data.representative || '未填寫') + '\n' +
+    '訂位人：' + (data.customerName || '未填寫') + '\n' +
+    '電話：' + (data.phone || '未填寫') + '\n' +
+    '人數：' + (data.guestCount || '?') + '人\n' +
+    '日期：' + (data.diningDate || '未填寫') + '\n' +
+    '時間：' + (data.diningTime || '未填寫') + '\n\n' +
+    '餐點明細：\n' + itemsText;
+  
+  return sendLineMessage(message);
+}
+
 /** ===== src/gas/line-bot.js ===== */
 /**
  * line-bot.js
@@ -3382,6 +3530,53 @@ function updateEmployee(spreadsheetId, data) {
     return {
       success: false,
       message: '更新員工失敗'
+    };
+  }
+}
+
+function deleteEmployee(spreadsheetId, data) {
+  try {
+    data = data || {};
+    var employeeId = sanitizeEmployeeText(data.employeeId, 80);
+    if (!employeeId) {
+      return { success: false, message: '請指定員工 ID' };
+    }
+
+    var ss = SpreadsheetApp.openById(spreadsheetId);
+    var sheet = ensureEmployeeSheet(ss);
+    var sheetData = sheet.getDataRange().getValues();
+    var headers = ensureEmployeeHeaders(sheet, sheetData[0] || []);
+
+    for (var i = 1; i < sheetData.length; i++) {
+      if (employeeCell(sheetData[i], headers, 'employeeId') === employeeId) {
+        var employeeName = sanitizeEmployeeText(employeeCell(sheetData[i], headers, 'name'), 80);
+        sheet.deleteRow(i + 1);
+
+        if (typeof logAction === 'function') {
+          logAction(spreadsheetId, 'system', 'deleteEmployee', 'employee', {
+            targetType: 'employee',
+            targetId: employeeId,
+            beforeJson: { employeeId: employeeId, name: employeeName }
+          });
+        }
+
+        return {
+          success: true,
+          message: '已刪除員工: ' + (employeeName || employeeId)
+        };
+      }
+    }
+
+    return {
+      success: false,
+      message: '找不到員工: ' + employeeId
+    };
+
+  } catch (e) {
+    Logger.log('deleteEmployee 錯誤: ' + e.toString());
+    return {
+      success: false,
+      message: '刪除員工失敗'
     };
   }
 }
@@ -3854,6 +4049,9 @@ function handleAdminPost(e) {
         break;
       case 'updateEmployee':
         result = updateEmployee(spreadsheetId, data);
+        break;
+      case 'deleteEmployee':
+        result = deleteEmployee(spreadsheetId, data);
         break;
       case 'resetEmployeePin':
         result = resetEmployeePin(spreadsheetId, data);

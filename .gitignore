@@ -2,9 +2,12 @@
 __pycache__/
 *.py[oc]
 build/
-dist/
 wheels/
 *.egg-info
+
+# esbuild build result
+dist/*
+!dist/bundle.js
 
 # Virtual environments
 .venv

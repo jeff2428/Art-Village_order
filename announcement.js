@@ -9,6 +9,10 @@ var Announcement = (function() {
   
   var announcements = null;
 
+  function setData(data) {
+    announcements = data;
+  }
+
   function load() {
     return Api.getAnnouncements()
       .then(function(data) {
@@ -63,7 +67,10 @@ var Announcement = (function() {
   }
 
   return {
+    setData: setData,
     load: load,
+    renderHeader: renderHeader,
+    renderPopup: renderPopup,
     closePopup: closePopup,
     showCheckoutAnnouncement: showCheckoutAnnouncement,
     confirmCheckout: confirmCheckout
