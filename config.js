@@ -4,5 +4,5 @@
  */
 
 window.ART_VILLAGE_CONFIG = {
-  GAS_API_URL: 'https://script.google.com/macros/s/AKfycbyp5TNjkodMrSRAEWLIrFaPWBdb5VDDvJNxkC6skk4isMlf4ggefVsQCfwKlRG7dEcA/exec'
+  GAS_API_URL: 'https://script.google.com/macros/s/AKfycbyv1eGhgbIsPbJQDd3G3c0DBhwDtdaN4m76hpKGYzHRCJfFBuLKVruBLreGmCghRrTy/exec'
 };
