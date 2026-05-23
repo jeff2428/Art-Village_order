@@ -244,28 +244,6 @@ test('AdminMenu import preview deduplicates option item names', () => {
   assert.deepEqual(JSON.parse(JSON.stringify(preview.items[0].customizationOptions[0].choices)), ['不辣', '小辣']);
 });
 
-test('AdminMenu renders option groups as modern cards with badges and chips', () => {
-  const AdminMenu = createAdminMenu();
-  const html = AdminMenu._test.renderOptionCard({
-    id: 'g-spicy',
-    name: '辣度',
-    type: 'single',
-    required: false,
-    enabled: true,
-    sortOrder: 10,
-    choices: ['不辣', '不辣', '小辣'],
-  });
-
-  assert.match(html, /辣度/);
-  assert.match(html, /單選/);
-  assert.match(html, /非必填/);
-  assert.match(html, /啟用/);
-  assert.match(html, /編輯/);
-  assert.match(html, /刪除/);
-  assert.equal((html.match(/不辣/g) || []).length, 1);
-  assert.match(html, /小辣/);
-});
-
 test('AdminMenu previews and applies full Excel import rows', () => {
   const AdminMenu = createAdminMenu();
   const preview = AdminMenu._test.previewImportRows({
@@ -324,6 +302,54 @@ test('AdminMenu source no longer uses browser prompt', () => {
 
   assert.doesNotMatch(source, /prompt\s*\(/);
   assert.doesNotMatch(source, /請輸入新分類名稱/);
+});
+
+test('Admin index defaults to menu and removes inventory and discount management', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+
+  assert.match(source, /showSection\('menu'\)/);
+  assert.doesNotMatch(source, /庫存管理/);
+  assert.doesNotMatch(source, /折扣管理/);
+  assert.doesNotMatch(source, /AdminDiscount/);
+  assert.doesNotMatch(source, /data-section-link="auditlog"/);
+  assert.doesNotMatch(source, /操作紀錄/);
+});
+
+test('AdminMenu removes bindings batch tab and dialog helpers', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'admin-menu.js'), 'utf8');
+
+  assert.doesNotMatch(source, /id: 'bindings'/);
+  assert.doesNotMatch(source, /label: '批量修改'/);
+  assert.doesNotMatch(source, /renderBindings/);
+  assert.doesNotMatch(source, /openBatchProductSettings/);
+  assert.doesNotMatch(source, /applyBatchProductSettings/);
+  assert.doesNotMatch(source, /getCheckedBatchOptionIds/);
+  assert.doesNotMatch(source, /附加屬性值 \/ 綁定/);
+});
+
+test('AdminMenu renders categories and option groups with source after selection checkbox', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'admin-menu.js'), 'utf8');
+
+  assert.ok(source.includes("AdminMenu.toggleAll(\\'categories\\', this.checked)\">', '來源', '分類名稱'"));
+  assert.ok(source.includes("AdminMenu.toggleAll(\\'options\\', this.checked)\">', '來源', '群組名稱'"));
+  assert.match(source, /rowActions\('Option', option\.id\)/);
+});
+
+test('AdminMenu schedules auto-save after local changes', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'admin-menu.js'), 'utf8');
+
+  assert.match(source, /function scheduleAutoSave/);
+  assert.match(source, /saveAll\(\{ auto: true \}\)/);
+  assert.doesNotMatch(source, /請按「儲存所有變更」寫入雲端/);
+  assert.match(source, /立即儲存/);
+});
+
+test('AdminMenu hides sort fields in product and category management', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'admin-menu.js'), 'utf8');
+
+  assert.doesNotMatch(source, /分類名稱', '排序'/);
+  assert.doesNotMatch(source, /附加屬性', '排序'/);
+  assert.match(source, /<input id="menuFormSort" type="hidden"/);
 });
 
 test('AdminMenu opens category modal with validation and character count', () => {

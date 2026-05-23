@@ -13,7 +13,6 @@
   <script src="admin-schedule.js"></script>
   <script src="admin-announcement.js"></script>
   <script src="admin-orders.js"></script>
-  <script src="admin-discount.js"></script>
   <script src="admin-employee.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -28,9 +27,7 @@
         <a href="#" data-section-link="schedule" onclick="showSection('schedule')" class="block px-4 py-2 hover:bg-gray-700">營業排程</a>
         <a href="#" data-section-link="announcement" onclick="showSection('announcement')" class="block px-4 py-2 hover:bg-gray-700">公告管理</a>
         <a href="#" data-section-link="orders" onclick="showSection('orders')" class="block px-4 py-2 hover:bg-gray-700">訂單歷史</a>
-        <a href="#" data-section-link="discount" onclick="showSection('discount')" class="block px-4 py-2 hover:bg-gray-700">折扣管理</a>
         <a href="#" data-section-link="employee" onclick="showSection('employee')" class="block px-4 py-2 hover:bg-gray-700">員工管理</a>
-        <a href="#" data-section-link="auditlog" onclick="showSection('auditlog')" class="block px-4 py-2 hover:bg-gray-700">操作紀錄</a>
       </nav>
     </aside>
 
@@ -53,7 +50,10 @@
         <div class="bg-white rounded-lg p-6 shadow">
           <div class="flex justify-between items-center mb-4">
             <h3 class="text-lg font-bold">每週營業時間</h3>
-            <button onclick="AdminSchedule.saveHours()" class="bg-green-500 text-white px-4 py-2 rounded">儲存設定</button>
+            <div class="flex gap-2">
+              <button onclick="AdminSchedule.openBatchHoursForm()" class="bg-white border border-green-200 text-green-700 hover:bg-green-50 px-4 py-2 rounded">批量修改</button>
+              <button onclick="AdminSchedule.saveHours()" class="bg-green-500 text-white px-4 py-2 rounded">儲存設定</button>
+            </div>
           </div>
           <div id="weeklySchedule" class="space-y-4">
             <!-- 動態生成週一到週日的設定 -->
@@ -151,19 +151,6 @@
         </div>
       </section>
 
-      <!-- 折扣管理 -->
-      <section id="discountSection" class="hidden">
-        <div class="flex justify-between items-center mb-4">
-          <h2 class="text-2xl font-bold">折扣管理</h2>
-          <button onclick="AdminDiscount.showAddForm()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded shadow flex items-center gap-2">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-            新增折扣
-          </button>
-        </div>
-        <div id="discountFormContainer" class="mb-4"></div>
-        <div id="discountList" class="space-y-4"></div>
-      </section>
-
       <!-- 員工管理 -->
       <section id="employeeSection" class="hidden">
         <div class="flex justify-between items-center mb-4">
@@ -177,20 +164,12 @@
         <div id="employeeList" class="space-y-4"></div>
       </section>
 
-      <!-- 操作紀錄 -->
-      <section id="auditlogSection" class="hidden">
-        <div class="flex justify-between items-center mb-4">
-          <h2 class="text-2xl font-bold">操作紀錄</h2>
-          <button onclick="AdminEmployee.loadAuditLog()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">重新整理</button>
-        </div>
-        <div id="auditLogList" class="space-y-4"></div>
-      </section>
     </main>
   </div>
 
   <script>
     function showSection(name) {
-      ['menu', 'schedule', 'announcement', 'orders', 'discount', 'employee', 'auditlog'].forEach(function(s) {
+      ['menu', 'schedule', 'announcement', 'orders', 'employee'].forEach(function(s) {
         document.getElementById(s + 'Section').classList.add('hidden');
       });
       document.getElementById(name + 'Section').classList.remove('hidden');
@@ -208,14 +187,13 @@
         case 'schedule': AdminSchedule.load(); break;
         case 'announcement': AdminAnnouncement.load(); break;
         case 'orders': AdminOrders.loadOrders(); break;
-        case 'discount': AdminDiscount.load(); break;
         case 'employee': AdminEmployee.loadEmployees(); break;
-        case 'auditlog': AdminEmployee.loadAuditLog(); break;
       }
     }
 
     document.addEventListener('DOMContentLoaded', function() {
       AdminEmployee.init();
+      showSection('menu');
     });
   </script>
 </body>

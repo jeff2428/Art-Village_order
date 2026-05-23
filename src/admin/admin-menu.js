@@ -9,6 +9,8 @@ var AdminMenu = (function() {
   var fullMenuState = createEmptyState();
   var currentTab = 'products';
   var isDirty = false;
+  var autoSaveTimer = null;
+  var isAutoSaving = false;
   var pendingImport = null;
   var filters = {
     search: '',
@@ -24,8 +26,7 @@ var AdminMenu = (function() {
   var TABS = [
     { id: 'products', label: '餐點管理' },
     { id: 'categories', label: '分類管理' },
-    { id: 'options', label: '附加屬性群組' },
-    { id: 'bindings', label: '附加屬性值 / 綁定' }
+    { id: 'options', label: '附加屬性群組' }
   ];
 
   function createEmptyState() {
@@ -145,7 +146,7 @@ var AdminMenu = (function() {
           '<div class="flex flex-wrap gap-2">' +
             '<button type="button" onclick="AdminMenu.downloadSettings()" class="rounded bg-white px-3 py-2 text-sm font-bold text-gray-700 border hover:bg-gray-50">下載設定檔</button>' +
             '<button type="button" onclick="AdminMenu.openUploadDialog()" class="rounded bg-white px-3 py-2 text-sm font-bold text-gray-700 border hover:bg-gray-50">上傳設定檔</button>' +
-            '<button type="button" onclick="AdminMenu.saveAll()" class="rounded bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">儲存所有變更</button>' +
+            '<button type="button" onclick="AdminMenu.saveAll()" class="rounded bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">立即儲存</button>' +
           '</div>' +
         '</div>' +
         '<div id="menuLoading" class="hidden space-y-3" aria-live="polite" aria-busy="true">' +
@@ -185,7 +186,6 @@ var AdminMenu = (function() {
     if (currentTab === 'categories') renderCategories();
     if (currentTab === 'products') renderProducts();
     if (currentTab === 'options') renderOptions();
-    if (currentTab === 'bindings') renderBindings();
   }
 
   function renderToolbar() {
@@ -216,7 +216,7 @@ var AdminMenu = (function() {
 
     if (currentTab === 'categories') {
       toolbar.innerHTML = '<div class="flex flex-wrap justify-between gap-3 rounded border bg-gray-50 p-4">' +
-        '<p class="text-sm text-gray-600">管理分類顯示名稱、狀態與排序。</p>' +
+        '<p class="text-sm text-gray-600">管理分類顯示名稱與狀態；顯示順序可直接拖曳調整。</p>' +
         '<button type="button" onclick="AdminMenu.openCategoryForm()" class="rounded bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700">新增分類</button>' +
       '</div>' + renderBatchBar('categories');
       return;
@@ -231,7 +231,7 @@ var AdminMenu = (function() {
       return;
     }
 
-    toolbar.innerHTML = '<div class="rounded border bg-gray-50 p-4 text-sm text-gray-600">在這裡檢視每個餐點綁定的附加屬性，或快速進入編輯。</div>';
+    toolbar.innerHTML = '';
   }
 
   function renderBatchBar(kind) {
@@ -246,13 +246,12 @@ var AdminMenu = (function() {
     var body = document.getElementById('menuBody');
     var categoryIds = fullMenuState.categories.map(function(c) { return c.id; });
     body.innerHTML = renderTable(
-      ['<input type="checkbox" onchange="AdminMenu.toggleAll(\'categories\', this.checked)">', '來源', '分類名稱', '排序', '狀態', '操作'],
+      ['<input type="checkbox" onchange="AdminMenu.toggleAll(\'categories\', this.checked)">', '來源', '分類名稱', '狀態', '操作'],
       fullMenuState.categories.map(function(category) {
         return [
           checkboxCell('categories', category.id),
           '自行建立',
           '<span class="font-bold">' + escapeHtml(category.name) + '</span>',
-          String(category.sortOrder),
           statusBadge(category.enabled, false),
           rowActions('Category', category.id)
         ];
@@ -269,7 +268,7 @@ var AdminMenu = (function() {
     var products = filterProducts(fullMenuState.items, fullMenuState.categories, filters);
     var productIds = products.map(function(p) { return p.id; });
     body.innerHTML = renderTable(
-      ['<input type="checkbox" onchange="AdminMenu.toggleAll(\'products\', this.checked)">', '來源', '分類', '餐點名稱', '價格', '狀態', '附加屬性', '排序', '操作'],
+      ['<input type="checkbox" onchange="AdminMenu.toggleAll(\'products\', this.checked)">', '來源', '分類', '餐點名稱', '價格', '狀態', '附加屬性', '操作'],
       products.map(function(item) {
         return [
           checkboxCell('products', item.id),
@@ -279,7 +278,6 @@ var AdminMenu = (function() {
           '$' + item.price,
           statusBadge(item.enabled, item.soldOut),
           (item.customizationOptions || []).map(function(option) { return '<span class="mr-1 inline-flex rounded bg-blue-50 px-2 py-1 text-xs font-bold text-blue-700">' + escapeHtml(option.name) + '</span>'; }).join('') || '<span class="text-gray-400">無</span>',
-          String(item.sortOrder),
           rowActions('Product', item.id)
         ];
       }),
@@ -303,58 +301,26 @@ var AdminMenu = (function() {
       return;
     }
 
-    body.innerHTML =
-      '<div class="space-y-3">' +
-        '<label class="inline-flex items-center gap-2 rounded border bg-white px-3 py-2 text-sm font-bold text-gray-700">' +
-          '<input type="checkbox" onchange="AdminMenu.toggleAll(\'options\', this.checked)"> 全選群組' +
-        '</label>' +
-        fullMenuState.options.map(renderOptionCard).join('') +
-      '</div>';
+    var optionIds = fullMenuState.options.map(function(option) { return option.id; });
+    body.innerHTML = renderTable(
+      ['<input type="checkbox" onchange="AdminMenu.toggleAll(\'options\', this.checked)">', '來源', '群組名稱', '類型', '必填', '狀態', '選項值', '操作'],
+      fullMenuState.options.map(function(option) {
+        return [
+          checkboxCell('options', option.id),
+          '自行建立',
+          '<span class="font-bold">' + escapeHtml(option.name) + '</span>',
+          optionTypeBadge(option.type),
+          requiredBadge(option.required),
+          statusBadge(option.enabled, false),
+          renderChoiceChips(option.choices || []),
+          rowActions('Option', option.id)
+        ];
+      }),
+      '尚未建立客製化群組',
+      'options',
+      optionIds
+    );
     initOptionDrag();
-  }
-
-  function renderOptionCard(option) {
-    return '<div class="rounded border border-gray-200 bg-white shadow-sm transition hover:border-green-200 hover:shadow" data-drag-id="' + escapeAttribute(option.id) + '" data-drag-kind="options">' +
-      '<div class="flex cursor-grab active:cursor-grabbing select-none items-center gap-2 border-b border-gray-100 px-4 py-2 text-gray-400 hover:text-gray-600 drag-handle">' +
-        '<span class="text-lg leading-none">⠿</span>' +
-        '<span class="text-xs">拖曳排序</span>' +
-      '</div>' +
-      '<div class="flex flex-col gap-4 p-4 pt-3 lg:flex-row lg:items-start lg:justify-between">' +
-        '<div class="flex min-w-0 flex-1 gap-3">' +
-          '<div class="pt-1">' + checkboxCell('options', option.id) + '</div>' +
-          '<div class="min-w-0 flex-1">' +
-            '<div class="flex flex-wrap items-center gap-2">' +
-              '<h4 class="text-lg font-bold text-gray-900">' + escapeHtml(option.name) + '</h4>' +
-              optionTypeBadge(option.type) +
-              requiredBadge(option.required) +
-              statusBadge(option.enabled, false) +
-            '</div>' +
-            '<div class="mt-3 flex flex-wrap gap-2">' + renderChoiceChips(option.choices || []) + '</div>' +
-            '<p class="mt-3 text-xs text-gray-500">排序 ' + escapeHtml(option.sortOrder) + ' · ' + String(uniqueStrings(option.choices || []).length) + ' 個選項</p>' +
-          '</div>' +
-        '</div>' +
-        '<div class="flex shrink-0 gap-2 lg:justify-end">' +
-          '<button type="button" onclick="AdminMenu.openOptionForm(\'' + escapeAttribute(option.id) + '\')" class="rounded border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100">編輯</button>' +
-          '<button type="button" onclick="AdminMenu.deleteOption(\'' + escapeAttribute(option.id) + '\')" class="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700 hover:bg-red-100">刪除</button>' +
-        '</div>' +
-      '</div>' +
-    '</div>';
-  }
-
-  function renderBindings() {
-    var body = document.getElementById('menuBody');
-    var rows = fullMenuState.items.map(function(item) {
-      return [
-        escapeHtml(item.category || '未分類'),
-        '<span class="font-bold">' + escapeHtml(item.name) + '</span>',
-        (item.customizationOptions || []).map(function(option) {
-          return '<div class="mb-1 rounded bg-gray-100 px-2 py-1 text-xs"><span class="font-bold">' + escapeHtml(option.name) + '</span>：' + escapeHtml((option.choices || []).join('、')) + '</div>';
-        }).join('') || '<span class="text-gray-400">尚未綁定</span>',
-        '<button type="button" onclick="AdminMenu.openProductForm(\'' + escapeAttribute(item.id) + '\')" class="text-sm font-bold text-blue-600 hover:text-blue-800">編輯綁定</button>'
-      ];
-    });
-
-    body.innerHTML = renderTable(['分類', '餐點', '已綁定附加屬性', '操作'], rows, '尚未建立餐點');
   }
 
   function renderTable(headers, rows, emptyText, dragKind, rowIds) {
@@ -434,7 +400,7 @@ var AdminMenu = (function() {
     openDialog(isNewCategory ? '新增分類' : '編輯分類',
       '<label class="block"><span class="mb-1 block text-sm font-bold">分類名稱</span><input id="menuFormName" value="' + escapeAttribute(category.name) + '" maxlength="' + categoryNameLimit + '" placeholder="例如：火鍋、飯類、飲品" data-autofocus="true" class="w-full rounded border px-3 py-2 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-100"></label>' +
       '<div class="-mt-3 text-right text-xs text-gray-500"><span id="menuFormNameCount">' + String(Array.from(category.name || '').length) + '</span>/' + categoryNameLimit + '</div>' +
-      '<label class="block"><span class="mb-1 block text-sm font-bold">排序</span><input id="menuFormSort" type="number" value="' + category.sortOrder + '" class="w-full rounded border px-3 py-2"></label>' +
+      '<input id="menuFormSort" type="hidden" value="' + category.sortOrder + '">' +
       '<label class="flex items-center gap-2"><input id="menuFormEnabled" type="checkbox" ' + (category.enabled ? 'checked' : '') + '> 啟用</label>',
       function() {
         var input = {
@@ -482,7 +448,7 @@ var AdminMenu = (function() {
         '<label class="block"><span class="mb-1 block text-sm font-bold">價格 *</span><input id="menuFormPrice" type="number" min="0" value="' + item.price + '" class="w-full rounded border px-3 py-2"></label>' +
         '<label class="block md:col-span-2"><span class="mb-1 block text-sm font-bold">描述</span><textarea id="menuFormDescription" rows="3" class="w-full rounded border px-3 py-2">' + escapeHtml(item.description) + '</textarea></label>' +
         '<label class="block md:col-span-2"><span class="mb-1 block text-sm font-bold">圖片 URL</span><input id="menuFormImageUrl" value="' + escapeAttribute(item.imageUrl) + '" class="w-full rounded border px-3 py-2"></label>' +
-        '<label class="block"><span class="mb-1 block text-sm font-bold">排序</span><input id="menuFormSort" type="number" value="' + item.sortOrder + '" class="w-full rounded border px-3 py-2"></label>' +
+        '<input id="menuFormSort" type="hidden" value="' + item.sortOrder + '">' +
         '<div class="flex flex-wrap items-end gap-4">' +
           '<label class="flex items-center gap-2"><input id="menuFormEnabled" type="checkbox" ' + (item.enabled ? 'checked' : '') + '> 啟用</label>' +
         '</div>' +
@@ -737,6 +703,10 @@ var AdminMenu = (function() {
     return source.filter(function(item) { return selected[kind][item.id]; });
   }
 
+  function getSelectedIds(kind) {
+    return Object.keys(selected[kind] || {}).filter(function(id) { return selected[kind][id]; });
+  }
+
   function toggleSelected(kind, id, checked) {
     selected[kind][id] = checked;
   }
@@ -768,17 +738,23 @@ var AdminMenu = (function() {
     renderProducts();
   }
 
-  function saveAll() {
+  function saveAll(options) {
+    options = options || {};
     setMessage('', '');
     var payload = normalizeMenuState(fullMenuState);
+    isAutoSaving = !!options.auto;
+    if (isAutoSaving) setMessage('success', '正在自動儲存...');
     return AdminApi.call('updateFullMenuState', { menuState: payload })
       .then(function() {
         fullMenuState = payload;
         isDirty = false;
-        setMessage('success', '菜單已儲存。前台會讀取最新設定。');
+        setMessage('success', options.auto ? '已自動儲存。前台會讀取最新設定。' : '菜單已儲存。前台會讀取最新設定。');
       })
       .catch(function(err) {
         setMessage('error', '儲存失敗：' + err.message);
+      })
+      .finally(function() {
+        isAutoSaving = false;
       });
   }
 
@@ -818,7 +794,8 @@ var AdminMenu = (function() {
             isDirty = true;
             closeDialog();
             renderShell();
-            setMessage('success', '設定檔已套用：分類 ' + preview.summary.categories + ' 筆、餐點 ' + preview.summary.items + ' 筆、附加屬性群組 ' + preview.summary.options + ' 組。請按「儲存所有變更」寫入雲端。');
+            setMessage('success', '設定檔已套用：分類 ' + preview.summary.categories + ' 筆、餐點 ' + preview.summary.items + ' 筆、附加屬性群組 ' + preview.summary.options + ' 組。正在自動儲存。');
+            scheduleAutoSave();
           } catch (err) {
             setDialogError('讀取失敗：' + err.message);
           }
@@ -1109,6 +1086,16 @@ var AdminMenu = (function() {
     isDirty = true;
     fullMenuState = normalizeMenuState(fullMenuState);
     renderShell();
+    scheduleAutoSave();
+  }
+
+  function scheduleAutoSave() {
+    if (autoSaveTimer) clearTimeout(autoSaveTimer);
+    setMessage('success', '變更已套用，正在自動儲存...');
+    autoSaveTimer = setTimeout(function() {
+      autoSaveTimer = null;
+      saveAll({ auto: true });
+    }, 700);
   }
 
   function setLoading(loading) {
@@ -1130,7 +1117,7 @@ var AdminMenu = (function() {
       ? 'rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700'
       : 'rounded border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700';
     el.className = classes;
-    el.textContent = message + (isDirty ? '（尚未儲存）' : '');
+    el.textContent = message + (isDirty && !isAutoSaving ? '（等待自動儲存）' : '');
   }
 
   function initCategoryDrag() {
@@ -1143,7 +1130,7 @@ var AdminMenu = (function() {
   }
 
   function initOptionDrag() {
-    initDragOnCards('options', fullMenuState.options);
+    initDragOnRows('options', fullMenuState.options);
   }
 
   function initDragOnRows(kind, source) {
@@ -1465,7 +1452,6 @@ var AdminMenu = (function() {
       normalizeMenuState: normalizeMenuState,
       filterProducts: filterProducts,
       validateProductInput: validateProductInput,
-      renderOptionCard: renderOptionCard,
       previewImportRows: previewImportRows,
       applyImportPreview: applyImportPreview,
       buildTemplateSheets: buildTemplateSheets
