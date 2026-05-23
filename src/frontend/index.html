@@ -3,9 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>藝素村線上點餐</title>
+  <title>星空x藝素村線上點餐</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script>
   <script src="config.js"></script>
   <script src="utils.js"></script>
   <script src="liff-auth.js"></script>
@@ -21,6 +24,8 @@
     .menu-item { transition: transform 0.1s; }
     .menu-item:active { transform: scale(0.98); }
     .loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.8); display: flex; align-items: center; justify-content: center; z-index: 50; }
+    .flatpickr-day.flatpickrDisabled, .flatpickr-day.disabled { color: #d1d5db; text-decoration: line-through; cursor: not-allowed; }
+    .flatpickr-day.flatpickrDisabled:hover { background: transparent; }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -50,7 +55,7 @@
   <!-- 登入畫面 -->
   <div id="loginScreen" class="hidden min-h-screen flex items-center justify-center p-4">
     <div class="bg-white rounded-xl shadow-lg p-8 w-full max-w-sm text-center">
-      <h1 class="text-2xl font-bold text-gray-800 mb-2">藝素村線上點餐</h1>
+      <h1 class="text-2xl font-bold text-gray-800 mb-2">星空x藝素村線上點餐</h1>
       <p class="text-gray-500 mb-6">請使用 LINE 登入以開始點餐</p>
       <button id="loginBtn" class="w-full bg-[#06C755] text-white py-3 rounded-lg font-medium flex items-center justify-center gap-2">
         <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M24 10.035c0 5.523-4.477 10-10 10s-10-4.477-10-10 4.477-10 10-10 10 4.477 10 10z"/></svg>
@@ -64,7 +69,7 @@
     <!-- 頂部導航 -->
     <header class="bg-white shadow-sm sticky top-0 z-30">
       <div class="px-4 py-3 flex items-center justify-between">
-        <h1 class="text-lg font-bold text-gray-800">藝素村線上點餐</h1>
+        <h1 class="text-lg font-bold text-gray-800">星空x藝素村線上點餐</h1>
         <div class="flex items-center gap-2">
           <span id="userName" class="text-sm text-gray-600"></span>
           <button onclick="handleLogout()" class="text-sm text-red-500">登出</button>
@@ -289,8 +294,8 @@
         renderMenuItems(Menu.getCurrentCategory());
         
         await loadAnnouncements();
-        var businessHours = await Api.getBusinessHours();
-        Reservation.init(businessHours, function() {
+        var scheduleData = await Api.getSchedule();
+        Reservation.init(scheduleData, function() {
           Announcement.showCheckoutAnnouncement(function() {
             OrderSubmit.submit();
           });

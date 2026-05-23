@@ -8,23 +8,90 @@ var Reservation = (function() {
   'use strict';
   
   var businessHours = null;
+  var holidays = [];
   var reservationData = null;
   var submitCallback = null;
 
-  function init(hours, onSubmit) {
-    businessHours = hours;
+  function init(scheduleData, onSubmit) {
+    businessHours = scheduleData.businessHours;
+    holidays = scheduleData.holidays || [];
     submitCallback = onSubmit || null;
+    initDatePicker();
     setupFormValidation();
+  }
+
+  function getClosedDaysOfWeek(bh) {
+    var closed = [];
+    for (var day = 0; day <= 6; day++) {
+      var d = bh[day.toString()];
+      if (!d || !d.enabled || d.slots.length === 0) {
+        closed.push(day);
+      }
+    }
+    return closed;
+  }
+
+  function getUnavailableDates() {
+    var disableDates = [];
+    
+    holidays.forEach(function(h) { disableDates.push(h.date); });
+    
+    if (!businessHours) return disableDates;
+    
+    var closedDays = getClosedDaysOfWeek(businessHours);
+    var today = new Date();
+    for (var i = 0; i < 90; i++) {
+      var d = new Date(today);
+      d.setDate(d.getDate() + i);
+      if (closedDays.indexOf(d.getDay()) !== -1) {
+        disableDates.push(d.getFullYear() + '-' + 
+          String(d.getMonth()+1).padStart(2,'0') + '-' + 
+          String(d.getDate()).padStart(2,'0'));
+      }
+    }
+    
+    return [...new Set(disableDates)];
+  }
+
+  function initDatePicker() {
+    var dateInput = document.getElementById('diningDate');
+    if (!dateInput) return;
+    
+    var unavailableDates = getUnavailableDates();
+    
+    flatpickr(dateInput, {
+      dateFormat: "Y-m-d",
+      minDate: "today",
+      maxDate: "today + 90 days",
+      disable: unavailableDates,
+      locale: "zh",
+      onChange: function(selectedDates, dateStr) {
+        setupTimeOptions(dateStr);
+      }
+    });
   }
 
   function setupTimeOptions(dateString) {
     var select = document.getElementById('diningTime');
     select.innerHTML = '<option value="">請選擇</option>';
     
-    if (!businessHours || !dateString) return;
+    if (!dateString) return;
     
     var date = new Date(dateString);
     var dayOfWeek = date.getDay(); // 0-6
+    
+    for (var i = 0; i < holidays.length; i++) {
+      if (holidays[i].date === dateString) {
+        var option = document.createElement('option');
+        option.value = "";
+        option.textContent = "本日公休（" + (holidays[i].reason || "公休") + "）";
+        select.appendChild(option);
+        return;
+      }
+    }
+    
+    if (!businessHours) return;
+    
     var dayData = businessHours[dayOfWeek.toString()];
     
     if (!dayData || !dayData.enabled || dayData.slots.length === 0) {
