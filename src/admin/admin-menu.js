@@ -246,7 +246,7 @@ var AdminMenu = (function() {
     var body = document.getElementById('menuBody');
     var categoryIds = fullMenuState.categories.map(function(c) { return c.id; });
     body.innerHTML = renderTable(
-      ['<input type="checkbox" onchange="AdminMenu.toggleAll(\'categories\', this.checked)">', '來源', '分類名稱', '狀態', '操作'],
+      [renderSelectAllCheckbox('categories', categoryIds), '來源', '分類名稱', '狀態', '操作'],
       fullMenuState.categories.map(function(category) {
         return [
           checkboxCell('categories', category.id),
@@ -268,7 +268,7 @@ var AdminMenu = (function() {
     var products = filterProducts(fullMenuState.items, fullMenuState.categories, filters);
     var productIds = products.map(function(p) { return p.id; });
     body.innerHTML = renderTable(
-      ['<input type="checkbox" onchange="AdminMenu.toggleAll(\'products\', this.checked)">', '來源', '分類', '餐點名稱', '價格', '狀態', '附加屬性', '操作'],
+      [renderSelectAllCheckbox('products', productIds), '來源', '分類', '餐點名稱', '價格', '狀態', '附加屬性', '操作'],
       products.map(function(item) {
         return [
           checkboxCell('products', item.id),
@@ -303,7 +303,7 @@ var AdminMenu = (function() {
 
     var optionIds = fullMenuState.options.map(function(option) { return option.id; });
     body.innerHTML = renderTable(
-      ['<input type="checkbox" onchange="AdminMenu.toggleAll(\'options\', this.checked)">', '來源', '群組名稱', '類型', '必填', '狀態', '選項值', '操作'],
+      [renderSelectAllCheckbox('options', optionIds), '來源', '群組名稱', '類型', '必填', '狀態', '選項值', '操作'],
       fullMenuState.options.map(function(option) {
         return [
           checkboxCell('options', option.id),
@@ -357,6 +357,17 @@ var AdminMenu = (function() {
 
   function checkboxCell(kind, id) {
     return '<input type="checkbox" ' + (selected[kind][id] ? 'checked' : '') + ' onchange="AdminMenu.toggleSelected(\'' + kind + '\', \'' + escapeAttribute(id) + '\', this.checked)">';
+  }
+
+  function renderSelectAllCheckbox(kind, ids) {
+    return buildSelectAllCheckbox(kind, ids, selected[kind] || {});
+  }
+
+  function buildSelectAllCheckbox(kind, ids, selection) {
+    var allSelected = ids.length > 0 && ids.every(function(id) { return selection[id]; });
+    return '<input type="checkbox" aria-label="全選目前列表" ' +
+      (allSelected ? 'checked ' : '') +
+      'onchange="AdminMenu.toggleAll(\'' + kind + '\', this.checked)">';
   }
 
   function rowActions(entity, id) {
@@ -1461,6 +1472,7 @@ var AdminMenu = (function() {
       filterProducts: filterProducts,
       validateProductInput: validateProductInput,
       moveItemToInsertIndex: moveItemToInsertIndex,
+      buildSelectAllCheckbox: buildSelectAllCheckbox,
       previewImportRows: previewImportRows,
       applyImportPreview: applyImportPreview,
       buildTemplateSheets: buildTemplateSheets

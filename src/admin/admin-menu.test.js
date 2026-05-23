@@ -330,8 +330,8 @@ test('AdminMenu removes bindings batch tab and dialog helpers', () => {
 test('AdminMenu renders categories and option groups with source after selection checkbox', () => {
   const source = fs.readFileSync(path.join(__dirname, 'admin-menu.js'), 'utf8');
 
-  assert.ok(source.includes("AdminMenu.toggleAll(\\'categories\\', this.checked)\">', '來源', '分類名稱'"));
-  assert.ok(source.includes("AdminMenu.toggleAll(\\'options\\', this.checked)\">', '來源', '群組名稱'"));
+  assert.match(source, /\[renderSelectAllCheckbox\('categories', categoryIds\), '來源', '分類名稱'/);
+  assert.match(source, /\[renderSelectAllCheckbox\('options', optionIds\), '來源', '群組名稱'/);
   assert.match(source, /rowActions\('Option', option\.id\)/);
 });
 
@@ -347,6 +347,23 @@ test('AdminMenu drag reorder supports moving rows down and to the end', () => {
 
   AdminMenu._test.moveItemToInsertIndex(rows, 2, 0);
   assert.deepEqual(rows.map((row) => row.id), ['d', 'b', 'c', 'a']);
+});
+
+test('AdminMenu select-all checkbox reflects current filtered rows', () => {
+  const AdminMenu = createAdminMenu();
+
+  assert.doesNotMatch(
+    AdminMenu._test.buildSelectAllCheckbox('products', ['p-a', 'p-b'], { 'p-a': true }),
+    /checked /,
+  );
+  assert.match(
+    AdminMenu._test.buildSelectAllCheckbox('products', ['p-a', 'p-b'], { 'p-a': true, 'p-b': true, 'p-hidden': true }),
+    /checked /,
+  );
+  assert.doesNotMatch(
+    AdminMenu._test.buildSelectAllCheckbox('products', [], {}),
+    /checked /,
+  );
 });
 
 test('AdminMenu schedules auto-save after local changes', () => {
