@@ -143,11 +143,12 @@ var AdminMenu = (function() {
             '<h3 class="text-xl font-bold text-gray-900">餐點管理</h3>' +
             '<p class="text-sm text-gray-500 mt-1">分類、餐點、附加屬性與批次匯入集中管理。</p>' +
           '</div>' +
-          '<div class="flex flex-wrap gap-2">' +
-            '<button type="button" onclick="AdminMenu.downloadSettings()" class="rounded bg-white px-3 py-2 text-sm font-bold text-gray-700 border hover:bg-gray-50">下載設定檔</button>' +
-            '<button type="button" onclick="AdminMenu.openUploadDialog()" class="rounded bg-white px-3 py-2 text-sm font-bold text-gray-700 border hover:bg-gray-50">上傳設定檔</button>' +
-            '<button type="button" onclick="AdminMenu.saveAll()" class="rounded bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">立即儲存</button>' +
-          '</div>' +
+           '<div class="flex flex-wrap gap-2">' +
+             '<button type="button" onclick="AdminMenu.downloadSettings()" class="rounded bg-white px-3 py-2 text-sm font-bold text-gray-700 border hover:bg-gray-50">下載設定檔</button>' +
+             '<button type="button" onclick="AdminMenu.openUploadDialog()" class="rounded bg-white px-3 py-2 text-sm font-bold text-gray-700 border hover:bg-gray-50">上傳設定檔</button>' +
+             '<button type="button" onclick="AdminMenu.openMigrationDialog()" class="rounded bg-amber-500 px-3 py-2 text-sm font-bold text-white hover:bg-amber-600">遷移至新版格式</button>' +
+             '<button type="button" onclick="AdminMenu.saveAll()" class="rounded bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">立即儲存</button>' +
+           '</div>' +
         '</div>' +
         '<div id="menuLoading" class="hidden space-y-3" aria-live="polite" aria-busy="true">' +
           '<div class="h-12 rounded bg-gray-200 animate-pulse"></div>' +
@@ -654,12 +655,14 @@ var AdminMenu = (function() {
       }
     });
     markDirtyAndRender();
+    scheduleAutoSave();
   }
 
   function deleteProduct(id) {
     if (!confirm('確定要刪除此餐點？')) return;
     fullMenuState.items = fullMenuState.items.filter(function(item) { return item.id !== id; });
     markDirtyAndRender();
+    scheduleAutoSave();
   }
 
   function deleteOption(id) {
@@ -669,6 +672,7 @@ var AdminMenu = (function() {
       item.customizationOptions = (item.customizationOptions || []).filter(function(option) { return option.id !== id; });
     });
     markDirtyAndRender();
+    scheduleAutoSave();
   }
 
   function batchSetEnabled(kind, enabled) {
@@ -754,7 +758,14 @@ var AdminMenu = (function() {
     isAutoSaving = !!options.auto;
     if (isAutoSaving) setMessage('success', '正在自動儲存...');
     return AdminApi.call('updateFullMenuState', { menuState: payload })
-      .then(function() {
+      .then(function(result) {
+        if (result.conflict) {
+          setMessage('warning', '衝突檢測：' + result.conflict.message);
+          if (confirm('偵測到其他使用者可能已修改資料。是否重新載入最新資料？')) {
+            return AdminMenu.load();
+          }
+          return Promise.resolve();
+        }
         fullMenuState = payload;
         isDirty = false;
         setMessage('success', options.auto ? '已自動儲存。前台會讀取最新設定。' : '菜單已儲存。前台會讀取最新設定。');
@@ -822,6 +833,36 @@ var AdminMenu = (function() {
       }
       el.innerHTML = '<div class="font-bold text-green-700">已選擇：' + escapeHtml(file.name) + '</div><div class="mt-1 text-xs text-gray-500">檔案大小：' + (file.size / 1024).toFixed(1) + ' KB</div>';
     };
+  }
+
+  function openMigrationDialog() {
+    openDialog('遷移至新版正規化格式',
+      '<div class="space-y-3">' +
+        '<p class="text-sm text-gray-700"><strong class="text-amber-600">此操作會將舊版「菜單」工作表遷移至新版 5 張工作表格式。</strong></p>' +
+        '<ul class="text-sm text-gray-600 list-disc pl-5 space-y-1">' +
+          '<li>自動建立 Categories、Products、OptionGroups、OptionItems、ProductOptions</li>' +
+          '<li>自動解析客製化選項並拆分為獨立表格</li>' +
+          '<li>遷移後建議確認資料正確，再手動刪除舊版「菜單」工作表</li>' +
+        '</ul>' +
+        '<div class="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">⚠️ 請先備份電子表格再執行遷移。</div>' +
+      '</div>',
+      function() {
+        closeDialog();
+        setMessage('info', '正在執行遷移...');
+        AdminApi.call('migrateMenuToNormalized')
+          .then(function(result) {
+            setMessage('success', result.message || '遷移完成！請重新載入頁面確認。');
+            renderShell();
+          })
+          .catch(function(err) {
+            setMessage('error', '遷移失敗：' + err.message);
+          });
+      },
+      {
+        submitText: '確認遷移',
+        submitClass: 'rounded bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-gray-300'
+      }
+    );
   }
 
   function downloadSettings() {
