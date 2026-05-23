@@ -294,7 +294,7 @@ for dessert_name in ["香椰冰淇淋", "香煎香蕉"]:
     ws_product_options.append([pid, "opt-protein", 10, True])
 
 # ── Save ──
-output_path = "outputs/art-village-sheet/藝素村菜單匯入檔.xlsx"
+output_path = "outputs/art-village-sheet/星空x藝素村菜單匯入檔.xlsx"
 wb.save(output_path)
 print(f"Excel file saved: {output_path}")
 print(f"  Categories: {len(categories)}")

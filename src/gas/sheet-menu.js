@@ -440,7 +440,9 @@ function dedupeOptionItems(items) {
 function getFullMenuState(spreadsheetId) {
   var ss = SpreadsheetApp.openById(spreadsheetId);
   if (hasNormalizedMenuSheets(ss)) {
-    return getNormalizedMenuState(ss);
+    var state = getNormalizedMenuState(ss);
+    state._version = getMenuVersion(ss) || '0';
+    return state;
   }
 
   var sheet = ss.getSheetByName('菜單');
@@ -665,6 +667,20 @@ function readAllOptionGroups(ss) {
 }
 
 function updateNormalizedMenuState(ss, menuState) {
+  var clientVersion = menuState._version;
+  var currentVersion = getMenuVersion(ss);
+  
+  if (clientVersion && currentVersion && clientVersion !== currentVersion) {
+    return {
+      success: false,
+      conflict: {
+        message: '資料已更新，請重新載入後再儲存。',
+        serverVersion: currentVersion,
+        clientVersion: clientVersion
+      }
+    };
+  }
+  
   var categories = menuState.categories || [];
   var options = menuState.options || [];
   var items = menuState.items || [];
@@ -750,9 +766,40 @@ function updateNormalizedMenuState(ss, menuState) {
   replaceSheetValues(ss, 'OptionGroups', optionGroupRows);
   replaceSheetValues(ss, 'OptionItems', optionItemRows);
   replaceSheetValues(ss, 'ProductOptions', productOptionRows);
+  
+  incrementMenuVersion(ss);
   clearMenuCache();
 
   return { success: true, message: '菜單已全面更新' };
+}
+
+function getMenuVersion(ss) {
+  var sheet = ss.getSheetByName('MenuVersion');
+  if (!sheet || sheet.getLastRow() < 1) return null;
+  var values = sheet.getDataRange().getValues();
+  if (values.length < 2) return null;
+  return String(values[1][1] || '');
+}
+
+function incrementMenuVersion(ss) {
+  var sheet = ss.getSheetByName('MenuVersion');
+  if (!sheet) {
+    sheet = ss.insertSheet('MenuVersion');
+    sheet.appendRow(['key', 'value']);
+    sheet.appendRow(['version', '1']);
+    return;
+  }
+  var values = sheet.getDataRange().getValues();
+  for (var i = 0; i < values.length; i++) {
+    if (String(values[i][0]) === 'version') {
+      var newRow = i + 2;
+      var currentVal = Number(values[i][1]) || 0;
+      sheet.getRange(newRow, 1).setValue('version');
+      sheet.getRange(newRow, 2).setValue(currentVal + 1);
+      return;
+    }
+  }
+  sheet.appendRow(['version', (Number(values[1][1]) || 0) + 1]);
 }
 
 function replaceSheetValues(ss, sheetName, rows) {

@@ -55,7 +55,7 @@ var Menu = (function() {
     return item.name + '::' + normalizedCustomizations;
   }
 
-  function addToCart(item, customizations) {
+  function addToCart(item, customizations, note) {
     var key = createCartKey(item, customizations);
     if (!selectedItems[key]) {
       selectedItems[key] = {
@@ -63,7 +63,8 @@ var Menu = (function() {
         key: key,
         item: item,
         quantity: 1,
-        customizations: customizations || []
+        customizations: customizations || [],
+        note: note || ''
       };
     } else {
       selectedItems[key].quantity += 1;
@@ -96,6 +97,10 @@ var Menu = (function() {
 
   function getCart() {
     return selectedItems;
+  }
+
+  function getCartItem(key) {
+    return selectedItems[key] || null;
   }
 
   function getCartItems() {
@@ -171,6 +176,7 @@ var Menu = (function() {
     removeFromCart: removeFromCart,
     removeCartItem: removeCartItem,
     getCart: getCart,
+    getCartItem: getCartItem,
     getCartItems: getCartItems,
     getCartCount: getCartCount,
     getCartTotal: getCartTotal,

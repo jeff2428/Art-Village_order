@@ -32,7 +32,7 @@ function processOrder(orderData) {
       Logger.log('訂單寫入失敗: ' + writeResult.message);
       return {
         success: false,
-        message: '訂單儲存失敗: ' + writeResult.message
+        message: '訂單儲存失敗'
       };
     }
     
@@ -54,7 +54,7 @@ function processOrder(orderData) {
     Logger.log('processOrder 錯誤: ' + e.toString());
     return {
       success: false,
-      message: '訂單處理失敗: ' + e.toString()
+      message: '訂單處理失敗，請稍後再試'
     };
   }
 }

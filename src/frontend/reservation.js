@@ -7,6 +7,7 @@
 var Reservation = (function() {
   'use strict';
   
+  var MAX_ADVANCE_DAYS = 90;
   var businessHours = null;
   var holidays = [];
   var reservationData = null;
@@ -40,7 +41,7 @@ var Reservation = (function() {
     
     var closedDays = getClosedDaysOfWeek(businessHours);
     var today = new Date();
-    for (var i = 0; i < 90; i++) {
+    for (var i = 0; i < MAX_ADVANCE_DAYS; i++) {
       var d = new Date(today);
       d.setDate(d.getDate() + i);
       if (closedDays.indexOf(d.getDay()) !== -1) {
@@ -62,7 +63,7 @@ var Reservation = (function() {
     flatpickr(dateInput, {
       dateFormat: "Y-m-d",
       minDate: "today",
-      maxDate: "today + 90 days",
+      maxDate: "today + " + MAX_ADVANCE_DAYS + " days",
       disable: unavailableDates,
       locale: "zh",
       onChange: function(selectedDates, dateStr) {

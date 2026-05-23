@@ -140,6 +140,20 @@ test('doPost keeps admin actions delegated to admin handler', () => {
   assert.deepEqual(calls, [['handleAdminPost', event]]);
 });
 
+test('getScheduleData returns combined business hours and holidays', () => {
+  const { context, calls } = createRouterContext();
+
+  var result = JSON.parse(JSON.stringify(context.getScheduleData('SHEET_ID')));
+
+  assert.deepEqual(result, {
+    businessHours: { openTime: '11:00', closeTime: '21:00' },
+    holidays: [{ date: '2026-05-19', reason: '公休' }],
+  });
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0][0], 'getBusinessHours');
+  assert.equal(calls[1][0], 'getHolidays');
+});
+
 test('unknown requests return a clear error', () => {
   const { context } = createRouterContext();
 

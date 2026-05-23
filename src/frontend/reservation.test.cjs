@@ -72,15 +72,19 @@ function createContext() {
     diningTime: createSelect(),
   };
   const alerts = [];
-  const context = {
-    alert(message) {
+  var flatpickrConfig = null;
+  var context = {
+    alert: function(message) {
       alerts.push(message);
     },
+    flatpickr: function(el, config) {
+      flatpickrConfig = config;
+    },
     document: {
-      createElement(tagName) {
-        return { tagName, value: '', textContent: '' };
+      createElement: function(tagName) {
+        return { tagName: tagName, value: '', textContent: '' };
       },
-      getElementById(id) {
+      getElementById: function(id) {
         return elements[id];
       },
     },
@@ -97,7 +101,8 @@ test('Reservation initializes time options from business hours', () => {
   const { context, elements } = createContext();
 
   context.Reservation.init({
-    1: { enabled: true, slots: ['11:00-12:00'] },
+    businessHours: { 1: { enabled: true, slots: ['11:00-12:00'] } },
+    holidays: [],
   });
   elements.diningDate.listeners.change({ target: { value: '2026-05-18' } });
 
@@ -111,7 +116,7 @@ test('Reservation blocks submit when required fields are missing', () => {
   const { context, formListeners, alerts } = createContext();
   let submitted = false;
 
-  context.Reservation.init({ 1: { enabled: true, slots: ['11:00-12:00'] } }, () => {
+  context.Reservation.init({ businessHours: { 1: { enabled: true, slots: ['11:00-12:00'] } }, holidays: [] }, () => {
     submitted = true;
   });
   formListeners.submit({ preventDefault() {} });
@@ -130,7 +135,7 @@ test('Reservation stores valid form data and calls submit callback', () => {
   elements.diningDate.value = '2026-05-18';
   elements.diningTime.value = '11:30';
 
-  context.Reservation.init({ 1: { enabled: true, slots: ['11:00-12:00'] } }, (data) => {
+  context.Reservation.init({ businessHours: { 1: { enabled: true, slots: ['11:00-12:00'] } }, holidays: [] }, (data) => {
     submittedData = data;
   });
   formListeners.submit({ preventDefault() {} });

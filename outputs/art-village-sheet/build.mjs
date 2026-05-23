@@ -3,7 +3,7 @@ import path from "node:path";
 import { SpreadsheetFile, Workbook } from "@oai/artifact-tool";
 
 const outputDir = "C:/Users/jeff2/Documents/Art-Village_order/outputs/art-village-sheet";
-const outputPath = path.join(outputDir, "藝素村線上點餐資料庫.xlsx");
+const outputPath = path.join(outputDir, "星空x藝素村線上點餐資料庫.xlsx");
 
 const workbook = Workbook.create();
 

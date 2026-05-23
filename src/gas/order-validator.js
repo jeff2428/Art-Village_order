@@ -1,8 +1,10 @@
 /**
  * order-validator.js
  * 訂單驗證模組
- * 職責：驗證訂單時限（營業結束前 1 小時截止）、營業日檢查
+ * 職責：驗證訂單時限（營業結束前 N 分鐘截止）、營業日檢查
  */
+
+var ORDER_CUTOFF_MINUTES = 60;
 
 /**
  * 驗證訂單資料
@@ -79,6 +81,11 @@ function validateOrder(orderData) {
     if (!isWithinOrderTime.valid) {
       return isWithinOrderTime;
     }
+
+    var priceValidation = validateOrderPrices(spreadsheetId, orderData.items);
+    if (!priceValidation.valid) {
+      return priceValidation;
+    }
     
     return {
       valid: true,
@@ -89,7 +96,7 @@ function validateOrder(orderData) {
     Logger.log('validateOrder 錯誤: ' + e.toString());
     return {
       valid: false,
-      message: '訂單驗證失敗: ' + e.toString()
+      message: '訂單驗證失敗'
     };
   }
 }
@@ -122,7 +129,7 @@ function checkBusinessDay(spreadsheetId, dateStr) {
     Logger.log('checkBusinessDay 錯誤: ' + e.toString());
     return {
       valid: false,
-      message: '檢查營業日失敗: ' + e.toString()
+      message: '檢查營業日失敗'
     };
   }
 }
@@ -157,7 +164,7 @@ function checkOrderTimeLimit(spreadsheetId, dateStr, timeStr) {
     }
 
     var closeMinutes = getCloseMinutesForTime(diningMinutes, daySchedule.slots);
-    var cutoffMinutes = closeMinutes - 60;
+    var cutoffMinutes = closeMinutes - ORDER_CUTOFF_MINUTES;
     var cutoffTime = minutesToTime(cutoffMinutes);
     
     var today = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd');
@@ -182,7 +189,7 @@ function checkOrderTimeLimit(spreadsheetId, dateStr, timeStr) {
     Logger.log('checkOrderTimeLimit 錯誤: ' + e.toString());
     return {
       valid: false,
-      message: '檢查點餐時間失敗: ' + e.toString()
+      message: '檢查點餐時間失敗'
     };
   }
 }
@@ -225,6 +232,92 @@ function validateOrderItems(items) {
     valid: true,
     message: '餐點驗證通過'
   };
+}
+
+/**
+ * 驗證訂單項目價格是否與菜單實際價格一致（防止價格竄改）
+ * @param {string} spreadsheetId - Google Sheet ID
+ * @param {Array} items - 訂單項目
+ * @returns {Object} { valid: boolean, message: string }
+ */
+function validateOrderPrices(spreadsheetId, items) {
+  try {
+    var priceMap = buildMenuPriceMap(spreadsheetId);
+
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      var name = String(item.name || '').trim();
+      var submittedPrice = parseFloat(item.price);
+
+      var actualPrice = priceMap[name];
+      if (actualPrice === undefined) {
+        if (priceMap.size === 0) {
+          break;
+        }
+        Logger.log('價格驗證: 找不到餐點 "' + name + '" 的價格，跳過驗證');
+        continue;
+      }
+
+      if (Math.abs(submittedPrice - actualPrice) > 0.01) {
+        Logger.log('價格竄改偵測: 餐點 "' + name + '" 提交價格 ' + submittedPrice + '，實際價格 ' + actualPrice);
+        return {
+          valid: false,
+          message: '餐點價格異常，請重新整理後再試'
+        };
+      }
+    }
+
+    return {
+      valid: true,
+      message: '價格驗證通過'
+    };
+  } catch (e) {
+    Logger.log('validateOrderPrices 錯誤: ' + e.toString());
+    return {
+      valid: true,
+      message: '價格驗證暫時無法執行（不阻擋訂單）'
+    };
+  }
+}
+
+/**
+ * 建立菜單名稱 → 價格的對照表
+ * @param {string} spreadsheetId - Google Sheet ID
+ * @returns {Object} 名稱到價格的映射
+ */
+function buildMenuPriceMap(spreadsheetId) {
+  var map = {};
+
+  try {
+    var ss = SpreadsheetApp.openById(spreadsheetId);
+
+    if (hasNormalizedMenuSheets(ss)) {
+      var rows = readSheetRows(ss, 'Products');
+      for (var i = 0; i < rows.length; i++) {
+        var name = String(rows[i][2] || '').trim();
+        var price = parseFloat(rows[i][4]);
+        if (name && isFinite(price) && price >= 0) {
+          map[name] = price;
+        }
+      }
+    } else {
+      var sheet = ss.getSheetByName('菜單');
+      if (sheet) {
+        var data = sheet.getDataRange().getValues();
+        for (var j = 1; j < data.length; j++) {
+          var legacyName = String(data[j][1] || '').trim();
+          var legacyPrice = parseFloat(data[j][2]);
+          if (legacyName && isFinite(legacyPrice) && legacyPrice >= 0) {
+            map[legacyName] = legacyPrice;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    Logger.log('buildMenuPriceMap 錯誤: ' + e.toString());
+  }
+
+  return map;
 }
 
 function isValidDateString(value) {

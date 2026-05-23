@@ -72,7 +72,7 @@ function loginEmployee(spreadsheetId, pinCode) {
     Logger.log('loginEmployee 錯誤: ' + e.toString());
     return {
       success: false,
-      message: '登入失敗'
+      message: '登入失敗，請稍後再試'
     };
   }
 }
@@ -197,7 +197,6 @@ function addEmployee(spreadsheetId, data) {
       employeeId: employeeId,
       name: sanitizeEmployeeText(data.name, 80),
       role: parseEmployeeRole(data.role) || 3,
-      pinCode: '',
       pinHash: hashPinCode(String(data.pinCode), salt),
       pinSalt: salt,
       failedAttempts: 0,
@@ -222,7 +221,7 @@ function addEmployee(spreadsheetId, data) {
     Logger.log('addEmployee 錯誤: ' + e.toString());
     return {
       success: false,
-      message: '新增員工失敗'
+      message: '新增員工失敗，請稍後再試'
     };
   }
 }
@@ -274,6 +273,53 @@ function updateEmployee(spreadsheetId, data) {
     return {
       success: false,
       message: '更新員工失敗'
+    };
+  }
+}
+
+function deleteEmployee(spreadsheetId, data) {
+  try {
+    data = data || {};
+    var employeeId = sanitizeEmployeeText(data.employeeId, 80);
+    if (!employeeId) {
+      return { success: false, message: '請指定員工 ID' };
+    }
+
+    var ss = SpreadsheetApp.openById(spreadsheetId);
+    var sheet = ensureEmployeeSheet(ss);
+    var sheetData = sheet.getDataRange().getValues();
+    var headers = ensureEmployeeHeaders(sheet, sheetData[0] || []);
+
+    for (var i = 1; i < sheetData.length; i++) {
+      if (employeeCell(sheetData[i], headers, 'employeeId') === employeeId) {
+        var employeeName = sanitizeEmployeeText(employeeCell(sheetData[i], headers, 'name'), 80);
+        sheet.deleteRow(i + 1);
+
+        if (typeof logAction === 'function') {
+          logAction(spreadsheetId, 'system', 'deleteEmployee', 'employee', {
+            targetType: 'employee',
+            targetId: employeeId,
+            beforeJson: { employeeId: employeeId, name: employeeName }
+          });
+        }
+
+        return {
+          success: true,
+          message: '已刪除員工: ' + (employeeName || employeeId)
+        };
+      }
+    }
+
+    return {
+      success: false,
+      message: '找不到員工: ' + employeeId
+    };
+
+  } catch (e) {
+    Logger.log('deleteEmployee 錯誤: ' + e.toString());
+    return {
+      success: false,
+      message: '刪除員工失敗'
     };
   }
 }
@@ -547,18 +593,20 @@ function recordFailedLogin(sheet, rowIndex, row, headers) {
 function verifyEmployeePin(row, headers, pinCode) {
   var pinHash = employeeCell(row, headers, 'pinHash');
   var pinSalt = employeeCell(row, headers, 'pinSalt');
-  if (pinHash && pinSalt) {
-    return pinHash === hashPinCode(pinCode, pinSalt);
+  if (!pinHash || !pinSalt) {
+    Logger.log('員工驗證失敗: 缺少 pinHash/pinSalt，該帳號可能尚未遷移雜湊 PIN（employeeId: ' + employeeCell(row, headers, 'employeeId') + '）');
+    return false;
   }
-  return String(employeeCell(row, headers, 'pinCode') || '') === pinCode;
+  return pinHash === hashPinCode(pinCode, pinSalt);
 }
 
 function migratePlainPinIfNeeded(sheet, rowIndex, row, headers, pinCode) {
-  if (employeeCell(row, headers, 'pinHash')) return;
+  if (employeeCell(row, headers, 'pinHash') && employeeCell(row, headers, 'pinSalt')) return;
   var salt = createPinSalt();
   setEmployeeCell(sheet, rowIndex, headers, 'pinCode', '');
   setEmployeeCell(sheet, rowIndex, headers, 'pinHash', hashPinCode(pinCode, salt));
   setEmployeeCell(sheet, rowIndex, headers, 'pinSalt', salt);
+  Logger.log('已遷移員工 PIN 至雜湊儲存（row: ' + rowIndex + '）');
 }
 
 function hashPinCode(pinCode, salt) {
@@ -576,17 +624,53 @@ function createPinSalt() {
   return Utilities.getUuid ? Utilities.getUuid() : String(Math.random()).slice(2);
 }
 
+/**
+ * 產生單次使用的 PIN 重設 Token（附帶 30 分鐘過期）
+ * @returns {string} 重設 token
+ */
+function generateEmployeeResetToken() {
+  var token = Utilities.getUuid ? Utilities.getUuid().replace(/-/g, '') : String(Math.random()).slice(2, 18);
+  var expiresAt = new Date(new Date().getTime() + 30 * 60 * 1000);
+
+  var props = PropertiesService.getScriptProperties();
+  props.setProperty('PIN_RESET_TOKEN', token);
+  props.setProperty('PIN_RESET_TOKEN_EXPIRES', Utilities.formatDate(expiresAt, 'Asia/Taipei', 'yyyy-MM-dd HH:mm:ss'));
+
+  return token;
+}
+
+/**
+ * 驗證 PIN Reset Token（單次使用 + 30 分鐘過期）
+ */
 function isValidEmployeeResetToken(resetToken) {
   var token = sanitizeEmployeeText(resetToken, 120);
   if (!token) return false;
 
   try {
-    var configuredToken = PropertiesService.getScriptProperties().getProperty('PIN_RESET_TOKEN');
-    if (!configuredToken) {
-      Logger.log('PIN_RESET_TOKEN 未設定，拒絕 PIN 重設請求');
+    var props = PropertiesService.getScriptProperties();
+    var storedToken = props.getProperty('PIN_RESET_TOKEN');
+    var expiresAt = props.getProperty('PIN_RESET_TOKEN_EXPIRES');
+
+    if (!storedToken || !expiresAt) {
+      Logger.log('PIN_RESET_TOKEN 未設定');
       return false;
     }
-    return token === configuredToken;
+
+    if (new Date(expiresAt).getTime() < new Date().getTime()) {
+      Logger.log('PIN_RESET_TOKEN 已過期');
+      props.deleteProperty('PIN_RESET_TOKEN');
+      props.deleteProperty('PIN_RESET_TOKEN_EXPIRES');
+      return false;
+    }
+
+    if (token !== storedToken) {
+      Logger.log('PIN_RESET_TOKEN 不匹配');
+      return false;
+    }
+
+    props.deleteProperty('PIN_RESET_TOKEN');
+    props.deleteProperty('PIN_RESET_TOKEN_EXPIRES');
+    return true;
   } catch (e) {
     Logger.log('讀取 PIN_RESET_TOKEN 失敗: ' + e.toString());
     return false;

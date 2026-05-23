@@ -54,20 +54,25 @@ function sendLineMessage(message) {
         success: true,
         message: '推播成功'
       };
-    } else {
-      var errorBody = response.getContentText();
-      Logger.log('LINE 推播失敗 (' + responseCode + '): ' + errorBody);
-      return {
-        success: false,
-        message: '推播失敗 (' + responseCode + '): ' + errorBody
-      };
     }
+    
+    var errorBody = response.getContentText();
+    Logger.log('LINE 推播失敗 (' + responseCode + '): ' + errorBody);
+    
+    if (responseCode === 401 || responseCode === 403) {
+      Logger.log('LINE API 授權失敗，請檢查 LINE_CHANNEL_ACCESS_TOKEN 是否有效');
+    }
+    
+    return {
+      success: false,
+      message: '推播失敗'
+    };
     
   } catch (e) {
     Logger.log('sendLineMessage 錯誤: ' + e.toString());
     return {
       success: false,
-      message: '推播異常: ' + e.toString()
+      message: '推播異常，請稍後再試'
     };
   }
 }
@@ -110,14 +115,14 @@ function sendLineMultipleMessages(messages) {
     if (responseCode === 200) {
       Logger.log('LINE 多則訊息推播成功');
       return { success: true };
-    } else {
-      Logger.log('LINE 多則訊息推播失敗: ' + response.getContentText());
-      return { success: false, message: response.getContentText() };
     }
+    
+    Logger.log('LINE 多則訊息推播失敗: ' + response.getContentText());
+    return { success: false, message: '推播失敗' };
     
   } catch (e) {
     Logger.log('sendLineMultipleMessages 錯誤: ' + e.toString());
-    return { success: false, message: e.toString() };
+    return { success: false, message: '推播異常，請稍後再試' };
   }
 }
 

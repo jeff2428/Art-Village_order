@@ -229,6 +229,13 @@ function parseJsonSafe(jsonStr) {
  */
 function addDiscount(spreadsheetId, data) {
   try {
+    if (typeof validateDiscountData === 'function') {
+      var validation = validateDiscountData(data);
+      if (!validation.valid) {
+        return { success: false, message: validation.message };
+      }
+    }
+
     var ss = SpreadsheetApp.openById(spreadsheetId);
     var sheet = ensureSheet(ss, 'Discounts', [
       'discountId', 'name', 'type', 'value', 'minAmount',
@@ -267,7 +274,7 @@ function addDiscount(spreadsheetId, data) {
     Logger.log('addDiscount 錯誤: ' + e.toString());
     return {
       success: false,
-      message: '新增折扣失敗: ' + e.toString()
+      message: '新增折扣失敗'
     };
   }
 }

@@ -39,6 +39,11 @@ function createSheet(rows) {
         },
       };
     },
+    deleteRow(rowIndex) {
+      if (rowIndex >= 1 && rowIndex <= rows.length) {
+        rows.splice(rowIndex - 1, 1);
+      }
+    },
   };
 }
 
@@ -194,4 +199,84 @@ test('getHolidays reads enabled Holidays rows and ignores disabled rows', () => 
   assert.deepEqual(plain(context.getHolidays('SHEET_ID')), [
     { date: '2026-05-19', reason: '公休' },
   ]);
+});
+
+test('addHoliday appends row to existing Holidays sheet', () => {
+  const sheetRows = {
+    '休假日期': [['日期', '原因']],
+  };
+  const context = createConfigContext(sheetRows);
+
+  const result = context.addHoliday('SHEET_ID', '2026-06-01', '端午節');
+
+  assert.equal(result.success, true);
+  assert.match(result.message, /2026-06-01/);
+  assert.equal(sheetRows['休假日期'].length, 2);
+  assert.deepEqual(plain(sheetRows['休假日期'][1]), ['2026-06-01', '端午節']);
+});
+
+test('addHoliday creates sheet if missing', () => {
+  const sheetRows = {};
+  const context = createConfigContext(sheetRows);
+
+  const result = context.addHoliday('SHEET_ID', '2026-06-01', '補假');
+
+  assert.equal(result.success, true);
+  assert.ok(sheetRows['休假日期']);
+  assert.equal(sheetRows['休假日期'].length, 2);
+  assert.deepEqual(plain(sheetRows['休假日期'][0]), ['日期', '原因']);
+  assert.deepEqual(plain(sheetRows['休假日期'][1]), ['2026-06-01', '補假']);
+});
+
+test('addHoliday defaults reason to empty string', () => {
+  const sheetRows = {
+    '休假日期': [['日期', '原因']],
+  };
+  const context = createConfigContext(sheetRows);
+
+  context.addHoliday('SHEET_ID', '2026-06-01');
+
+  assert.equal(sheetRows['休假日期'].length, 2);
+  assert.deepEqual(plain(sheetRows['休假日期'][1]), ['2026-06-01', '']);
+});
+
+test('removeHoliday deletes matching row from Holidays sheet', () => {
+  const sheetRows = {
+    '休假日期': [
+      ['日期', '原因'],
+      ['2026-05-19', '公休'],
+      ['2026-05-20', '補假'],
+    ],
+  };
+  const context = createConfigContext(sheetRows);
+
+  const result = context.removeHoliday('SHEET_ID', '2026-05-19');
+
+  assert.equal(result.success, true);
+  assert.equal(sheetRows['休假日期'].length, 2);
+  assert.equal(plain(sheetRows['休假日期'][1][0]), '2026-05-20');
+});
+
+test('removeHoliday returns error for non-existent date', () => {
+  const sheetRows = {
+    '休假日期': [
+      ['日期', '原因'],
+      ['2026-05-19', '公休'],
+    ],
+  };
+  const context = createConfigContext(sheetRows);
+
+  const result = context.removeHoliday('SHEET_ID', '2026-06-01');
+
+  assert.equal(result.success, false);
+  assert.match(result.message, /找不到/);
+});
+
+test('removeHoliday returns error when Holidays sheet missing', () => {
+  const context = createConfigContext({});
+
+  const result = context.removeHoliday('SHEET_ID', '2026-06-01');
+
+  assert.equal(result.success, false);
+  assert.match(result.message, /找不到工作表/);
 });

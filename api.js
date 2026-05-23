@@ -131,8 +131,16 @@ var Api = (function() {
    * @returns {Promise<Object>} 訂單資料陣列
    */
   function getOrdersByUserId(data) {
-    return fetchWithRetry(GAS_API_URL + '?action=getOrdersByUserId&liffUserId=' + encodeURIComponent(data.liffUserId))
-      .then(handleJsonResponse('取得訂單失敗'));
+    var idToken = LiffAuth.getIdToken();
+    return fetchWithRetry(GAS_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'getOrdersByUserId',
+        liffUserId: data.liffUserId,
+        idToken: idToken
+      })
+    }).then(handleJsonResponse('取得訂單失敗'));
   }
 
   /**

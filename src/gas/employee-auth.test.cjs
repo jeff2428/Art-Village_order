@@ -16,6 +16,9 @@ function createSheet(rows = []) {
     getLastRow() {
       return rows.length;
     },
+    deleteRow(rowIndex) {
+      rows.splice(rowIndex - 1, 1);
+    },
     getRange(rowIndex, columnIndex) {
       return {
         setValue(value) {
@@ -242,4 +245,20 @@ test('changeEmployeePin updates the hash after verifying the current PIN', () =>
 
   assert.equal(context.loginEmployee('SHEET_ID', '1234').success, false);
   assert.equal(context.loginEmployee('SHEET_ID', '5678').success, true);
+});
+
+test('deleteEmployee removes the target employee row', () => {
+  const { context, sheets } = createEmployeeContext({
+    Employees: [
+      ['employeeId', 'name', 'role', 'pinCode', 'enabled'],
+      ['EMP-1', '店長', 1, '1234', true],
+      ['EMP-2', '員工', 3, '5678', true],
+    ],
+  });
+
+  const result = context.deleteEmployee('SHEET_ID', { employeeId: 'EMP-1' });
+
+  assert.equal(result.success, true);
+  assert.equal(sheets.Employees.rows.length, 2);
+  assert.equal(sheets.Employees.rows[1][0], 'EMP-2');
 });

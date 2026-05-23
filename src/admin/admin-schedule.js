@@ -8,6 +8,8 @@ var AdminSchedule = (function() {
 
   var currentSchedule = {};
   var pendingHolidayDate = '';
+  var autoSaveTimer = null;
+  var isAutoSaving = false;
   var DAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
 
   function load(options) {
@@ -117,16 +119,19 @@ var AdminSchedule = (function() {
       currentSchedule[dayIndex.toString()].slots.push('11:00-21:00');
     }
     renderWeeklySchedule();
+    scheduleAutoSave();
   }
 
   function addSlot(dayIndex) {
     currentSchedule[dayIndex.toString()].slots.push('11:00-21:00');
     renderWeeklySchedule();
+    scheduleAutoSave();
   }
 
   function removeSlot(dayIndex, slotIndex) {
     currentSchedule[dayIndex.toString()].slots.splice(slotIndex, 1);
     renderWeeklySchedule();
+    scheduleAutoSave();
   }
 
   function updateSlot(dayIndex, slotIndex, type, val) {
@@ -135,22 +140,213 @@ var AdminSchedule = (function() {
     if (type === 'start') parts[0] = val;
     else parts[1] = val;
     currentSchedule[dayIndex.toString()].slots[slotIndex] = parts.join('-');
+    scheduleAutoSave();
   }
 
-  function saveHours() {
+  function openBatchHoursForm() {
+    var modal = document.getElementById('scheduleBatchModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'scheduleBatchModal';
+      modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50 px-4';
+      modal.innerHTML =
+        '<div class="w-full max-w-2xl rounded-lg bg-white p-6 shadow-lg" role="dialog" aria-modal="true" aria-labelledby="scheduleBatchTitle">' +
+          '<div class="flex items-start justify-between gap-4">' +
+            '<div>' +
+              '<h3 id="scheduleBatchTitle" class="text-lg font-bold">批量修改每週營業時間</h3>' +
+              '<p class="mt-1 text-sm text-gray-500">選擇要套用的星期，設定為營業或休息，並填入營業時段。</p>' +
+            '</div>' +
+            '<button type="button" onclick="AdminSchedule.closeBatchHoursForm()" class="text-gray-500 hover:text-gray-700" aria-label="關閉">✕</button>' +
+          '</div>' +
+          '<div class="mt-5 space-y-4">' +
+            '<div>' +
+              '<div class="mb-2 text-sm font-medium text-gray-700">套用到</div>' +
+              '<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">' +
+                DAYS.map(function(day, index) {
+                  return '<label class="flex items-center gap-2 rounded border px-3 py-2 text-sm"><input id="batchDay' + index + '" type="checkbox"> ' + day + '</label>';
+                }).join('') +
+              '</div>' +
+            '</div>' +
+            '<label class="flex items-center gap-2 rounded border bg-gray-50 px-3 py-2 text-sm font-medium"><input id="batchEnabled" type="checkbox" checked onchange="AdminSchedule.toggleBatchSlots(this.checked)"> 設為營業日</label>' +
+            '<div id="batchSlots" class="space-y-3">' +
+              '<div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2">' +
+                '<input id="batchStart1" type="time" value="11:00" class="rounded border px-3 py-2">' +
+                '<span class="text-sm text-gray-500">至</span>' +
+                '<input id="batchEnd1" type="time" value="21:00" class="rounded border px-3 py-2">' +
+              '</div>' +
+              '<div>' +
+                '<div class="mb-1 text-xs text-gray-500">第二時段（選填）</div>' +
+                '<div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2">' +
+                  '<input id="batchStart2" type="time" class="rounded border px-3 py-2">' +
+                  '<span class="text-sm text-gray-500">至</span>' +
+                  '<input id="batchEnd2" type="time" class="rounded border px-3 py-2">' +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+            '<p id="scheduleBatchError" class="hidden rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert"></p>' +
+          '</div>' +
+          '<div class="mt-6 flex justify-end gap-2">' +
+            '<button type="button" onclick="AdminSchedule.closeBatchHoursForm()" class="rounded bg-gray-200 px-4 py-2 text-gray-700 hover:bg-gray-300">取消</button>' +
+            '<button type="button" onclick="AdminSchedule.applyBatchHoursForm()" class="rounded bg-green-600 px-4 py-2 font-medium text-white hover:bg-green-700">套用</button>' +
+          '</div>' +
+        '</div>';
+      modal.addEventListener('click', function(event) {
+        if (event.target === modal) closeBatchHoursForm();
+      });
+      document.body.appendChild(modal);
+    }
+
+    setBatchError('');
+    modal.classList.remove('hidden');
+    var firstDay = document.getElementById('batchDay1');
+    if (firstDay) firstDay.focus();
+  }
+
+  function closeBatchHoursForm() {
+    var modal = document.getElementById('scheduleBatchModal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  function toggleBatchSlots(enabled) {
+    var slots = document.getElementById('batchSlots');
+    if (!slots) return;
+    slots.className = enabled ? 'space-y-3' : 'hidden space-y-3';
+  }
+
+  function applyBatchHoursForm() {
+    var selectedDays = [];
+    for (var i = 0; i < 7; i++) {
+      var dayInput = document.getElementById('batchDay' + i);
+      if (dayInput && dayInput.checked) selectedDays.push(i);
+    }
+
+    var enabledInput = document.getElementById('batchEnabled');
+    var enabled = !enabledInput || enabledInput.checked;
+    var slots = [];
+
+    if (enabled) {
+      var start1 = getBatchValue('batchStart1');
+      var end1 = getBatchValue('batchEnd1');
+      var start2 = getBatchValue('batchStart2');
+      var end2 = getBatchValue('batchEnd2');
+
+      if (start1 || end1) slots.push(start1 + '-' + end1);
+      if (start2 || end2) slots.push(start2 + '-' + end2);
+    }
+
+    var result = applyBatchHours(currentSchedule, selectedDays, {
+      enabled: enabled,
+      slots: slots
+    });
+
+    if (!result.success) {
+      setBatchError(result.message);
+      return;
+    }
+
+    closeBatchHoursForm();
+    renderWeeklySchedule();
+    showMessage('success', '已套用批量修改，正在自動儲存');
+    scheduleAutoSave();
+  }
+
+  function applyBatchHours(schedule, days, settings) {
+    schedule = schedule || {};
+    days = days || [];
+    settings = settings || {};
+
+    if (!days.length) {
+      return { success: false, message: '請至少選擇一個星期' };
+    }
+
+    var enabled = settings.enabled !== false;
+    var slots = enabled ? normalizeSlots(settings.slots || []) : [];
+
+    if (enabled && !slots.length) {
+      return { success: false, message: '營業日請至少設定一個時段' };
+    }
+
+    var sortedSlots = [];
+    for (var slotIndex = 0; slotIndex < slots.length; slotIndex++) {
+      var parts = slots[slotIndex].split('-');
+      if (!parts[0] || !parts[1] || parts[0] >= parts[1]) {
+        return { success: false, message: '營業時段需早於結束時間' };
+      }
+      sortedSlots.push({ start: parts[0], end: parts[1], index: slotIndex });
+    }
+
+    sortedSlots.sort(function(a, b) { return a.start.localeCompare(b.start); });
+    for (var i = 1; i < sortedSlots.length; i++) {
+      if (sortedSlots[i].start < sortedSlots[i - 1].end) {
+        return { success: false, message: '第 ' + (sortedSlots[i - 1].index + 1) + ' 個與第 ' + (sortedSlots[i].index + 1) + ' 個時段重疊' };
+      }
+    }
+
+    days.forEach(function(dayIndex) {
+      schedule[String(dayIndex)] = {
+        enabled: enabled,
+        slots: slots.slice()
+      };
+    });
+
+    return { success: true, schedule: schedule };
+  }
+
+  function normalizeSlots(slots) {
+    var result = [];
+    (slots || []).forEach(function(slot) {
+      var value = String(slot || '').trim();
+      if (!value || value === '-') return;
+      var parts = value.split('-');
+      if (!parts[0] && !parts[1]) return;
+      result.push((parts[0] || '') + '-' + (parts[1] || ''));
+    });
+    return result;
+  }
+
+  function getBatchValue(id) {
+    var el = document.getElementById(id);
+    return el ? el.value : '';
+  }
+
+  function setBatchError(message) {
+    var el = document.getElementById('scheduleBatchError');
+    if (!el) return;
+    el.textContent = message;
+    el.className = message
+      ? 'rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700'
+      : 'hidden rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700';
+  }
+
+  function saveHours(options) {
+    options = options || {};
     clearMessage();
 
     if (!validateSchedule()) {
       return;
     }
 
+    isAutoSaving = !!options.auto;
+    if (isAutoSaving) showMessage('success', '正在自動儲存營業排程...');
     AdminApi.call('updateBusinessHours', { scheduleData: currentSchedule })
       .then(function() {
-        showMessage('success', '營業排程已成功更新');
+        showMessage('success', options.auto ? '營業排程已自動儲存' : '營業排程已成功更新');
       })
       .catch(function(err) {
         showMessage('error', '更新失敗: ' + err.message);
+      })
+      .finally(function() {
+        isAutoSaving = false;
       });
+  }
+
+  function scheduleAutoSave() {
+    if (autoSaveTimer) clearTimeout(autoSaveTimer);
+    if (!isAutoSaving) showMessage('success', '變更已套用，正在自動儲存...');
+    autoSaveTimer = setTimeout(function() {
+      autoSaveTimer = null;
+      saveHours({ auto: true });
+    }, 700);
   }
 
   function addHoliday() {
@@ -243,11 +439,27 @@ var AdminSchedule = (function() {
       var dayData = currentSchedule[dayIndex.toString()];
       if (!dayData || !dayData.enabled) continue;
 
+      if (dayData.slots.length === 0) {
+        showMessage('error', DAYS[dayIndex] + ' 已設為營業但無任何時段');
+        return false;
+      }
+
+      var slotRanges = [];
       for (var slotIndex = 0; slotIndex < dayData.slots.length; slotIndex++) {
         var slot = dayData.slots[slotIndex];
         var parts = slot.split('-');
         if (!parts[0] || !parts[1] || parts[0] >= parts[1]) {
           showMessage('error', DAYS[dayIndex] + ' 第 ' + (slotIndex + 1) + ' 個時段需早於結束時間');
+          return false;
+        }
+        slotRanges.push({ start: parts[0], end: parts[1], index: slotIndex });
+      }
+
+      slotRanges.sort(function(a, b) { return a.start.localeCompare(b.start); });
+
+      for (var i = 1; i < slotRanges.length; i++) {
+        if (slotRanges[i].start < slotRanges[i - 1].end) {
+          showMessage('error', DAYS[dayIndex] + ' 第 ' + (slotRanges[i - 1].index + 1) + ' 個與第 ' + (slotRanges[i].index + 1) + ' 個時段重疊');
           return false;
         }
       }
@@ -299,6 +511,14 @@ var AdminSchedule = (function() {
     addSlot: addSlot,
     removeSlot: removeSlot,
     updateSlot: updateSlot,
-    validateSchedule: validateSchedule
+    openBatchHoursForm: openBatchHoursForm,
+    closeBatchHoursForm: closeBatchHoursForm,
+    toggleBatchSlots: toggleBatchSlots,
+    applyBatchHoursForm: applyBatchHoursForm,
+    validateSchedule: validateSchedule,
+    _test: {
+      applyBatchHours: applyBatchHours,
+      normalizeSlots: normalizeSlots
+    }
   };
 })();

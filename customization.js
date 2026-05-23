@@ -16,6 +16,8 @@ var Customization = (function() {
     renderOptions(item.customizationOptions || []);
     document.getElementById('customizationModal').classList.remove('hidden');
     document.getElementById('customizationTitle').textContent = item.name;
+    var noteInput = document.getElementById('itemNote');
+    if (noteInput) noteInput.value = '';
     validateSelections();
   }
 
@@ -56,6 +58,21 @@ var Customization = (function() {
       group.appendChild(choicesContainer);
       container.appendChild(group);
     });
+
+    var noteGroup = document.createElement('div');
+    noteGroup.className = 'space-y-2';
+    var noteLabel = document.createElement('label');
+    noteLabel.className = 'block text-sm font-medium text-gray-700';
+    noteLabel.textContent = '備註（選填，最多 50 字）';
+    noteGroup.appendChild(noteLabel);
+    var noteInput = document.createElement('textarea');
+    noteInput.id = 'itemNote';
+    noteInput.className = 'w-full border border-gray-300 rounded-lg px-3 py-2';
+    noteInput.rows = '2';
+    noteInput.maxLength = '50';
+    noteInput.placeholder = '請輸入備註（最多 50 字）';
+    noteGroup.appendChild(noteInput);
+    container.appendChild(noteGroup);
   }
 
   function handleSelection(opt, choice, btn, container) {
@@ -113,9 +130,13 @@ var Customization = (function() {
       }
     }
 
+    var noteInput = document.getElementById('itemNote');
+    var note = noteInput ? noteInput.value.trim() : '';
+
     var result = {
       item: currentItem,
-      customizations: customizations
+      customizations: customizations,
+      note: note
     };
 
     close();
@@ -126,6 +147,10 @@ var Customization = (function() {
     return customizations.map(function(c) {
       return c.optionName + ': ' + c.selectedValue;
     }).join(' / ');
+  }
+
+  function formatNote(note) {
+    return note ? '📝 ' + note : '';
   }
 
   function uniqueChoices(choices) {
@@ -144,6 +169,7 @@ var Customization = (function() {
     open: open,
     close: close,
     confirm: confirm,
-    formatCustomizations: formatCustomizations
+    formatCustomizations: formatCustomizations,
+    formatNote: formatNote
   };
 })();

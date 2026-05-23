@@ -1,5 +1,5 @@
 /**
- * 藝素村點餐系統 - Google Apps Script 部署檔
+ * 星空x藝素村點餐系統 - Google Apps Script 部署檔
  * 由 src/gas 模組合併產生。
  * 請整份貼到 Apps Script 的 Code.gs。
  */
@@ -3386,6 +3386,53 @@ function updateEmployee(spreadsheetId, data) {
   }
 }
 
+function deleteEmployee(spreadsheetId, data) {
+  try {
+    data = data || {};
+    var employeeId = sanitizeEmployeeText(data.employeeId, 80);
+    if (!employeeId) {
+      return { success: false, message: '請指定員工 ID' };
+    }
+
+    var ss = SpreadsheetApp.openById(spreadsheetId);
+    var sheet = ensureEmployeeSheet(ss);
+    var sheetData = sheet.getDataRange().getValues();
+    var headers = ensureEmployeeHeaders(sheet, sheetData[0] || []);
+
+    for (var i = 1; i < sheetData.length; i++) {
+      if (employeeCell(sheetData[i], headers, 'employeeId') === employeeId) {
+        var employeeName = sanitizeEmployeeText(employeeCell(sheetData[i], headers, 'name'), 80);
+        sheet.deleteRow(i + 1);
+
+        if (typeof logAction === 'function') {
+          logAction(spreadsheetId, 'system', 'deleteEmployee', 'employee', {
+            targetType: 'employee',
+            targetId: employeeId,
+            beforeJson: { employeeId: employeeId, name: employeeName }
+          });
+        }
+
+        return {
+          success: true,
+          message: '已刪除員工: ' + (employeeName || employeeId)
+        };
+      }
+    }
+
+    return {
+      success: false,
+      message: '找不到員工: ' + employeeId
+    };
+
+  } catch (e) {
+    Logger.log('deleteEmployee 錯誤: ' + e.toString());
+    return {
+      success: false,
+      message: '刪除員工失敗'
+    };
+  }
+}
+
 function resetEmployeePin(spreadsheetId, data) {
   try {
     data = data || {};
@@ -3854,6 +3901,9 @@ function handleAdminPost(e) {
         break;
       case 'updateEmployee':
         result = updateEmployee(spreadsheetId, data);
+        break;
+      case 'deleteEmployee':
+        result = deleteEmployee(spreadsheetId, data);
         break;
       case 'resetEmployeePin':
         result = resetEmployeePin(spreadsheetId, data);

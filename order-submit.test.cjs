@@ -79,9 +79,13 @@ function createContext({ reservation, cart, liffUserId = 'U123', submitOrder }) 
       getUserId() {
         return liffUserId;
       },
+      getDisplayName() {
+        return '';
+      },
     },
     Api: {
       submitOrder: submitOrder || ((payload) => Promise.resolve({ orderId: 'ORD-1', payload })),
+      sendOrderToLine: () => Promise.resolve({ success: true }),
     },
   };
 
@@ -113,6 +117,7 @@ test('OrderSubmit prepares order payload with reservation, cart, and LIFF user i
   const payload = context.OrderSubmit.prepareOrderData();
 
   assert.deepEqual(JSON.parse(JSON.stringify(payload)), {
+    representative: '',
     customerName: '王小明',
     phone: '0912345678',
     guestCount: 2,
@@ -124,6 +129,7 @@ test('OrderSubmit prepares order payload with reservation, cart, and LIFF user i
         quantity: 1,
         price: 120,
         customizations: [{ optionName: '辣度', selectedValue: '小辣' }],
+        note: '',
       },
     ],
     liffUserId: 'U123',
@@ -156,9 +162,11 @@ test('OrderSubmit submits order and shows success screen', async () => {
   await context.OrderSubmit.submit();
 
   assert.equal(submittedPayload.customerName, '王小明');
+  assert.equal(submittedPayload.representative, '');
   assert.equal(elements.orderIdDisplay.textContent, 'ORD-20260518');
-  assert.match(elements.orderSummaryDisplay.textContent, /訂位人：王小明/);
-  assert.match(elements.orderSummaryDisplay.textContent, /用餐時間：2026-05-18 11:30/);
+  assert.ok(String(elements.orderSummaryDisplay.textContent).indexOf('訂位代表：') !== -1);
+  assert.ok(String(elements.orderSummaryDisplay.textContent).indexOf('訂位人：王小明') !== -1);
+  assert.ok(String(elements.orderSummaryDisplay.textContent).indexOf('用餐時間：2026-05-18 11:30') !== -1);
   assert.equal(elements.checkoutBtn.disabled, false);
   assert.equal(elements.checkoutBtn.textContent, '前往結帳');
 });
@@ -177,7 +185,8 @@ test('OrderSubmit renders reservation data as text in success summary', () => {
 
   context.OrderSubmit.showSuccess('ORD-1');
 
-  assert.equal(elements.orderSummaryDisplay.children[0].textContent, '訂位人：<img src=x onerror=alert(1)>');
+  assert.equal(elements.orderSummaryDisplay.children[0].textContent, '訂位代表：');
+  assert.equal(elements.orderSummaryDisplay.children[1].textContent, '訂位人：<img src=x onerror=alert(1)>');
   assert.equal(elements.orderSummaryDisplay.children[0].children.length, 0);
 });
 

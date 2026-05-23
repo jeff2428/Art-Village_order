@@ -31,7 +31,7 @@ var AdminEmployee = (function() {
       loginOverlay.innerHTML =
         '<div class="bg-white rounded-xl p-8 shadow-2xl max-w-md w-full" role="dialog" aria-modal="true" aria-labelledby="loginTitle">' +
           '<div id="loginPanel">' +
-            '<h2 id="loginTitle" class="text-2xl font-bold mb-2 text-center text-gray-900">藝素村管理後台</h2>' +
+            '<h2 id="loginTitle" class="text-2xl font-bold mb-2 text-center text-gray-900">星空x藝素村管理後台</h2>' +
             '<p class="text-sm text-gray-500 mb-6 text-center">請輸入員工 PIN 碼登入</p>' +
             '<div class="mb-4">' +
               '<label for="loginPinCode" class="block text-sm font-medium mb-2 text-gray-700">PIN 碼</label>' +
@@ -333,6 +333,7 @@ var AdminEmployee = (function() {
     }
     
     updateNavByRole();
+    showSection('menu');
   }
 
   function updateNavByRole() {
@@ -427,7 +428,8 @@ var AdminEmployee = (function() {
             '<span class="px-2 py-1 rounded text-sm ' + (emp.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800') + '">' + (emp.enabled ? '啟用' : '停用') + '</span>' +
             '<div class="mt-2">' +
               '<button onclick="AdminEmployee.editEmployee(' + index + ')" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm mr-2">編輯</button>' +
-              '<button onclick="AdminEmployee.toggleEmployee(' + index + ')" class="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-sm">' + (emp.enabled ? '停用' : '啟用') + '</button>' +
+              '<button onclick="AdminEmployee.toggleEmployee(' + index + ')" class="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-sm mr-2">' + (emp.enabled ? '停用' : '啟用') + '</button>' +
+              '<button onclick="AdminEmployee.deleteEmployee(' + index + ')" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm">刪除</button>' +
             '</div>' +
           '</div>' +
         '</div>';
@@ -596,6 +598,33 @@ var AdminEmployee = (function() {
       });
   }
 
+  function deleteEmployee(index) {
+    AdminApi.getEmployees()
+      .then(function(result) {
+        var employees = result.data || [];
+        var emp = employees[index];
+        if (!emp) return;
+
+        if (currentEmployee && emp.employeeId === currentEmployee.employeeId) {
+          alert('不能刪除目前登入中的帳號');
+          return;
+        }
+
+        if (!confirm('確定要刪除員工「' + emp.name + '」嗎？此操作無法復原。')) {
+          return;
+        }
+
+        AdminApi.deleteEmployee({ employeeId: emp.employeeId })
+          .then(function(result) {
+            alert(result.message);
+            loadEmployees();
+          })
+          .catch(function(err) {
+            alert('刪除失敗: ' + err.message);
+          });
+      });
+  }
+
   function cancelEmployeeForm() {
     document.getElementById('employeeFormContainer').innerHTML = '';
   }
@@ -665,6 +694,7 @@ var AdminEmployee = (function() {
     editEmployee: editEmployee,
     saveEditEmployee: saveEditEmployee,
     toggleEmployee: toggleEmployee,
+    deleteEmployee: deleteEmployee,
     cancelEmployeeForm: cancelEmployeeForm,
     loadAuditLog: loadAuditLog
   };

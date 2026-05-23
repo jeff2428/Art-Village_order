@@ -8,6 +8,16 @@ var OrderSubmit = (function() {
   'use strict';
   var isSubmitting = false;
 
+  var _idempotencyKey = null;
+
+  function generateIdempotencyKey() {
+    var arr = new Uint8Array(16);
+    crypto.getRandomValues(arr);
+    return Array.from(arr, function(b) {
+      return b.toString(16).padStart(2, '0');
+    }).join('');
+  }
+
   function prepareOrderData() {
     var reservation = Reservation.getData();
     var cart = Menu.getCart();
@@ -24,22 +34,29 @@ var OrderSubmit = (function() {
         name: cartItem.item.name,
         quantity: cartItem.quantity,
         price: cartItem.item.price,
-        customizations: cartItem.customizations
+        customizations: cartItem.customizations,
+        note: cartItem.note || ''
       });
     }
 
     if (items.length === 0) {
       throw new Error('購物籃是空的');
     }
+
+    if (!_idempotencyKey) {
+      _idempotencyKey = generateIdempotencyKey();
+    }
     
     return {
+      representative: reservation.representative || LiffAuth.getDisplayName() || '',
       customerName: reservation.customerName,
       phone: reservation.phone,
       guestCount: reservation.guestCount,
       diningDate: reservation.diningDate,
       diningTime: reservation.diningTime,
       items: items,
-      liffUserId: liffUserId
+      liffUserId: liffUserId,
+      idempotencyKey: _idempotencyKey
     };
   }
 
@@ -57,6 +74,11 @@ var OrderSubmit = (function() {
       })
       .then(function(result) {
         showSuccess(result.orderId);
+        var orderData = prepareOrderData();
+        orderData.orderId = result.orderId;
+        Api.sendOrderToLine(orderData).catch(function(err) {
+          console.log('訂單通知送出失敗:', err);
+        });
         return result;
       })
       .catch(function(err) {
@@ -93,6 +115,7 @@ var OrderSubmit = (function() {
 
   function renderSuccessSummary(container, reservation) {
     container.textContent = '';
+    appendSummaryLine(container, '訂位代表：' + (reservation.representative || ''));
     appendSummaryLine(container, '訂位人：' + reservation.customerName);
     appendSummaryLine(container, '聯絡電話：' + reservation.phone);
     appendSummaryLine(container, '用餐人數：' + reservation.guestCount + ' 人');
@@ -106,6 +129,7 @@ var OrderSubmit = (function() {
   }
 
   function reset() {
+    _idempotencyKey = null;
     Menu.clearCart();
     Reservation.reset();
     document.getElementById('successScreen').classList.add('hidden');
