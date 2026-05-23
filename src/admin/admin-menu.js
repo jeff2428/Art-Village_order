@@ -342,7 +342,7 @@ var AdminMenu = (function() {
           rows.map(function(row, index) {
             var dragId = rowIds && rowIds[index] ? escapeAttribute(rowIds[index]) : '';
             var dragCell = dragKind
-              ? '<td class="px-3 py-3 align-top"><span class="drag-handle cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 select-none" data-drag-kind="' + escapeAttribute(dragKind) + '" data-drag-id="' + dragId + '" data-drag-index="' + index + '">⠿</span></td>'
+              ? '<td class="px-3 py-3 align-top whitespace-nowrap"><span class="drag-handle cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 select-none inline-flex items-center gap-1" data-drag-kind="' + escapeAttribute(dragKind) + '" data-drag-id="' + dragId + '" data-drag-index="' + index + '"><span class="text-xs text-gray-400 font-mono w-4 text-right">' + (index + 1) + '</span>⠿</span></td>'
               : '';
             var dragIdAttr = dragId ? ' data-drag-id="' + dragId + '" data-drag-kind="' + escapeAttribute(dragKind) + '"' : '';
             return '<tr class="' + (index % 2 === 0 ? 'bg-yellow-50/60' : 'bg-white') + '" data-drag-row="' + index + '"' + dragIdAttr + '>' +
@@ -510,10 +510,8 @@ var AdminMenu = (function() {
     openDialog(isNewOption ? '新增客製化群組' : '編輯客製化群組',
       '<label class="block"><span class="mb-1 block text-sm font-bold">群組名稱</span><input id="menuFormName" value="' + escapeAttribute(option.name) + '" maxlength="' + optionNameLimit + '" placeholder="例如：甜度、加麵、配料" data-autofocus="true" class="w-full rounded border px-3 py-2 focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-100"></label>' +
       '<div class="-mt-3 text-right text-xs text-gray-500"><span id="menuFormNameCount">' + String(Array.from(option.name || '').length) + '</span>/' + optionNameLimit + '</div>' +
-      '<div class="grid gap-3 md:grid-cols-2">' +
-        '<label class="block"><span class="mb-1 block text-sm font-bold">選擇類型</span><select id="menuFormType" class="w-full rounded border px-3 py-2">' + optionHtml('single', '單選', option.type) + optionHtml('multiple', '多選', option.type) + '</select></label>' +
-        '<label class="block"><span class="mb-1 block text-sm font-bold">排序</span><input id="menuFormSort" type="number" value="' + option.sortOrder + '" class="w-full rounded border px-3 py-2"></label>' +
-      '</div>' +
+      '<label class="block"><span class="mb-1 block text-sm font-bold">選擇類型</span><select id="menuFormType" class="w-full rounded border px-3 py-2">' + optionHtml('single', '單選', option.type) + optionHtml('multiple', '多選', option.type) + '</select></label>' +
+      '<input id="menuFormSort" type="hidden" value="' + option.sortOrder + '">' +
       '<label class="block"><span class="mb-1 block text-sm font-bold">選項值 *</span><textarea id="menuFormChoices" rows="4" placeholder="每行一個，例如：正常冰" class="w-full rounded border px-3 py-2">' + escapeHtml((option.choices || []).join('\n')) + '</textarea></label>' +
       '<div class="flex flex-wrap gap-4">' +
         '<label class="flex items-center gap-2"><input id="menuFormRequired" type="checkbox" ' + (option.required ? 'checked' : '') + '> 必填</label>' +
@@ -841,7 +839,7 @@ var AdminMenu = (function() {
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(sheets.products), 'Products');
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(sheets.productOptions), 'ProductOptions');
 
-    var fileName = '藝素村菜單設定_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+    var fileName = '星空x藝素村菜單設定_' + new Date().toISOString().slice(0, 10) + '.xlsx';
     XLSX.writeFile(workbook, fileName);
     setMessage('success', '設定檔已下載：' + fileName);
   }
@@ -1136,12 +1134,15 @@ var AdminMenu = (function() {
   }
 
   function initProductDrag() {
-    var products = filterProducts(fullMenuState.items, fullMenuState.categories, filters);
-    initDragOnRows('products', products);
+    initDragOnRows('products', fullMenuState.items);
   }
 
   function initOptionDrag() {
     initDragOnRows('options', fullMenuState.options);
+  }
+
+  function getClientY(e) {
+    return e.type.indexOf('touch') === 0 ? e.touches[0].clientY : e.clientY;
   }
 
   function initDragOnRows(kind, source) {
@@ -1161,6 +1162,11 @@ var AdminMenu = (function() {
           e.stopPropagation();
           startDragRows(kind, source, row, idx, e.clientY);
         });
+
+        handle.addEventListener('touchstart', function(e) {
+          e.preventDefault();
+          startDragRows(kind, source, row, idx, e.touches[0].clientY);
+        }, { passive: false });
       })(rows[i], i);
     }
   }
@@ -1183,6 +1189,11 @@ var AdminMenu = (function() {
           e.stopPropagation();
           startDragCards(kind, source, card, idx, e.clientY);
         });
+
+        handle.addEventListener('touchstart', function(e) {
+          e.preventDefault();
+          startDragCards(kind, source, card, idx, e.touches[0].clientY);
+        }, { passive: false });
       })(cards[i], i);
     }
   }
@@ -1199,29 +1210,58 @@ var AdminMenu = (function() {
     document.body.appendChild(ghost);
     startRow.style.opacity = '0.3';
 
-    var insertIdx = startIdx;
+    // Use data-drag-id to find actual source index (handles filtered views)
+    var dragId = startRow.getAttribute('data-drag-id');
+    var actualStartIdx = startIdx;
+    if (dragId) {
+      for (var i = 0; i < source.length; i++) {
+        if (String(source[i].id) === dragId) {
+          actualStartIdx = i;
+          break;
+        }
+      }
+    }
+
+    var insertIdx = actualStartIdx;
+    var cachedRows = null;
 
     function onMove(e) {
-      ghost.style.top = (e.clientY - 20) + 'px';
+      if (e.cancelable) e.preventDefault();
+      var clientY = getClientY(e);
+      ghost.style.top = (clientY - 20) + 'px';
 
-      var allRows = document.querySelectorAll('#menuBody table tbody tr[data-drag-row]');
-      allRows.forEach(function(r) { r.classList.remove('border-t-2', 'border-blue-400', 'border-b-2'); });
+      if (!cachedRows) {
+        cachedRows = document.querySelectorAll('#menuBody table tbody tr[data-drag-row]');
+      }
+      cachedRows.forEach(function(r) { r.classList.remove('border-t-2', 'border-blue-400', 'border-b-2'); });
 
-      insertIdx = startIdx;
-      for (var i = 0; i < allRows.length; i++) {
+      insertIdx = actualStartIdx;
+      for (var i = 0; i < cachedRows.length; i++) {
         if (i === startIdx) continue;
-        var rect = allRows[i].getBoundingClientRect();
+        var rect = cachedRows[i].getBoundingClientRect();
         var midY = rect.top + rect.height / 2;
-        if (e.clientY < midY) {
-          insertIdx = i;
-          allRows[i].classList.add('border-t-2', 'border-blue-400');
+        if (clientY < midY) {
+          // Map DOM insert position to source array index via drag-id
+          var targetRow = cachedRows[i];
+          var targetId = targetRow.getAttribute('data-drag-id');
+          if (targetId) {
+            for (var j = 0; j < source.length; j++) {
+              if (String(source[j].id) === targetId) {
+                insertIdx = j;
+                break;
+              }
+            }
+          } else {
+            insertIdx = i;
+          }
+          cachedRows[i].classList.add('border-t-2', 'border-blue-400');
           return;
         }
       }
 
-      if (allRows.length > 0) {
-        insertIdx = allRows.length;
-        allRows[allRows.length - 1].classList.add('border-b-2', 'border-blue-400');
+      if (cachedRows.length > 0) {
+        insertIdx = source.length;
+        cachedRows[cachedRows.length - 1].classList.add('border-b-2', 'border-blue-400');
       }
     }
 
@@ -1230,12 +1270,15 @@ var AdminMenu = (function() {
       startRow.style.opacity = '';
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
 
-      var allRows = document.querySelectorAll('#menuBody table tbody tr[data-drag-row]');
-      allRows.forEach(function(r) { r.classList.remove('border-t-2', 'border-blue-400', 'border-b-2'); });
+      if (cachedRows) {
+        cachedRows.forEach(function(r) { r.classList.remove('border-t-2', 'border-blue-400', 'border-b-2'); });
+      }
 
-      if (insertIdx !== startIdx) {
-        moveItemToInsertIndex(source, startIdx, insertIdx);
+      if (insertIdx !== actualStartIdx) {
+        moveItemToInsertIndex(source, actualStartIdx, insertIdx);
         reassignSortOrder(kind, source);
         markDirtyAndRender();
       }
@@ -1243,6 +1286,8 @@ var AdminMenu = (function() {
 
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onUp);
   }
 
   function startDragCards(kind, source, startCard, startIdx, startY) {
@@ -1261,7 +1306,9 @@ var AdminMenu = (function() {
     var insertIdx = startIdx;
 
     function onMove(e) {
-      ghost.style.top = (e.clientY - 20) + 'px';
+      if (e.cancelable) e.preventDefault();
+      var clientY = getClientY(e);
+      ghost.style.top = (clientY - 20) + 'px';
 
       var container = document.getElementById('menuBody');
       if (!container) return;
@@ -1274,7 +1321,7 @@ var AdminMenu = (function() {
         if (cards[i] === startCard) continue;
         var rect = cards[i].getBoundingClientRect();
         var midY = rect.top + rect.height / 2;
-        if (e.clientY < midY) {
+        if (clientY < midY) {
           insertIdx = i;
           cards[i].classList.add('ring-2', 'ring-blue-400');
           return;
@@ -1292,6 +1339,8 @@ var AdminMenu = (function() {
       startCard.style.opacity = '';
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
 
       var container = document.getElementById('menuBody');
       if (container) {
@@ -1309,6 +1358,8 @@ var AdminMenu = (function() {
 
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onUp);
   }
 
   function reassignSortOrder(kind, source) {
