@@ -335,6 +335,20 @@ test('AdminMenu renders categories and option groups with source after selection
   assert.match(source, /rowActions\('Option', option\.id\)/);
 });
 
+test('AdminMenu drag reorder supports moving rows down and to the end', () => {
+  const AdminMenu = createAdminMenu();
+  const rows = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
+
+  AdminMenu._test.moveItemToInsertIndex(rows, 0, 2);
+  assert.deepEqual(rows.map((row) => row.id), ['b', 'a', 'c', 'd']);
+
+  AdminMenu._test.moveItemToInsertIndex(rows, 1, rows.length);
+  assert.deepEqual(rows.map((row) => row.id), ['b', 'c', 'd', 'a']);
+
+  AdminMenu._test.moveItemToInsertIndex(rows, 2, 0);
+  assert.deepEqual(rows.map((row) => row.id), ['d', 'b', 'c', 'a']);
+});
+
 test('AdminMenu schedules auto-save after local changes', () => {
   const source = fs.readFileSync(path.join(__dirname, 'admin-menu.js'), 'utf8');
 

@@ -335,8 +335,8 @@ var AdminMenu = (function() {
     return '<div class="overflow-x-auto rounded border bg-white">' +
       '<table class="min-w-full divide-y divide-gray-200 text-sm">' +
         '<thead class="bg-yellow-300 text-gray-900"><tr>' +
-          headers.map(function(header) { return '<th class="whitespace-nowrap px-3 py-3 text-left font-bold">' + header + '</th>'; }).join('') +
           dragColHtml +
+          headers.map(function(header) { return '<th class="whitespace-nowrap px-3 py-3 text-left font-bold">' + header + '</th>'; }).join('') +
         '</tr></thead>' +
         '<tbody class="divide-y divide-gray-100">' +
           rows.map(function(row, index) {
@@ -346,8 +346,8 @@ var AdminMenu = (function() {
               : '';
             var dragIdAttr = dragId ? ' data-drag-id="' + dragId + '" data-drag-kind="' + escapeAttribute(dragKind) + '"' : '';
             return '<tr class="' + (index % 2 === 0 ? 'bg-yellow-50/60' : 'bg-white') + '" data-drag-row="' + index + '"' + dragIdAttr + '>' +
-              row.map(function(cell) { return '<td class="px-3 py-3 align-top">' + cell + '</td>'; }).join('') +
               dragCell +
+              row.map(function(cell) { return '<td class="px-3 py-3 align-top">' + cell + '</td>'; }).join('') +
             '</tr>';
           }).join('') +
         '</tbody>' +
@@ -1188,7 +1188,7 @@ var AdminMenu = (function() {
     document.body.appendChild(ghost);
     startRow.style.opacity = '0.3';
 
-    var targetIdx = startIdx;
+    var insertIdx = startIdx;
 
     function onMove(e) {
       ghost.style.top = (e.clientY - 20) + 'px';
@@ -1196,20 +1196,20 @@ var AdminMenu = (function() {
       var allRows = document.querySelectorAll('#menuBody table tbody tr[data-drag-row]');
       allRows.forEach(function(r) { r.classList.remove('border-t-2', 'border-blue-400', 'border-b-2'); });
 
-      targetIdx = startIdx;
+      insertIdx = startIdx;
       for (var i = 0; i < allRows.length; i++) {
         if (i === startIdx) continue;
         var rect = allRows[i].getBoundingClientRect();
         var midY = rect.top + rect.height / 2;
         if (e.clientY < midY) {
-          targetIdx = i;
+          insertIdx = i;
           allRows[i].classList.add('border-t-2', 'border-blue-400');
           return;
         }
       }
 
       if (allRows.length > 0) {
-        targetIdx = allRows.length - 1;
+        insertIdx = allRows.length;
         allRows[allRows.length - 1].classList.add('border-b-2', 'border-blue-400');
       }
     }
@@ -1223,10 +1223,8 @@ var AdminMenu = (function() {
       var allRows = document.querySelectorAll('#menuBody table tbody tr[data-drag-row]');
       allRows.forEach(function(r) { r.classList.remove('border-t-2', 'border-blue-400', 'border-b-2'); });
 
-      if (targetIdx !== startIdx) {
-        var item = source.splice(startIdx, 1)[0];
-        var adjustedTarget = targetIdx > startIdx ? targetIdx - 1 : targetIdx;
-        source.splice(adjustedTarget, 0, item);
+      if (insertIdx !== startIdx) {
+        moveItemToInsertIndex(source, startIdx, insertIdx);
         reassignSortOrder(kind, source);
         markDirtyAndRender();
       }
@@ -1249,7 +1247,7 @@ var AdminMenu = (function() {
     document.body.appendChild(ghost);
     startCard.style.opacity = '0.3';
 
-    var targetIdx = startIdx;
+    var insertIdx = startIdx;
 
     function onMove(e) {
       ghost.style.top = (e.clientY - 20) + 'px';
@@ -1260,20 +1258,20 @@ var AdminMenu = (function() {
       if (!cards.length) cards = container.querySelectorAll('[data-drag-kind="options"]');
       cards.forEach(function(c) { c.classList.remove('ring-2', 'ring-blue-400'); });
 
-      targetIdx = startIdx;
+      insertIdx = startIdx;
       for (var i = 0; i < cards.length; i++) {
         if (cards[i] === startCard) continue;
         var rect = cards[i].getBoundingClientRect();
         var midY = rect.top + rect.height / 2;
         if (e.clientY < midY) {
-          targetIdx = i;
+          insertIdx = i;
           cards[i].classList.add('ring-2', 'ring-blue-400');
           return;
         }
       }
 
       if (cards.length > 0) {
-        targetIdx = cards.length - 1;
+        insertIdx = cards.length;
         cards[cards.length - 1].classList.add('ring-2', 'ring-blue-400');
       }
     }
@@ -1291,10 +1289,8 @@ var AdminMenu = (function() {
         cards.forEach(function(c) { c.classList.remove('ring-2', 'ring-blue-400'); });
       }
 
-      if (targetIdx !== startIdx) {
-        var item = source.splice(startIdx, 1)[0];
-        var adjustedTarget = targetIdx > startIdx ? targetIdx - 1 : targetIdx;
-        source.splice(adjustedTarget, 0, item);
+      if (insertIdx !== startIdx) {
+        moveItemToInsertIndex(source, startIdx, insertIdx);
         reassignSortOrder(kind, source);
         markDirtyAndRender();
       }
@@ -1308,6 +1304,18 @@ var AdminMenu = (function() {
     for (var i = 0; i < source.length; i++) {
       source[i].sortOrder = (i + 1) * 10;
     }
+  }
+
+  function moveItemToInsertIndex(source, startIdx, insertIdx) {
+    if (!source || startIdx < 0 || startIdx >= source.length) return source;
+    if (insertIdx < 0) insertIdx = 0;
+    if (insertIdx > source.length) insertIdx = source.length;
+    if (insertIdx === startIdx) return source;
+
+    var item = source.splice(startIdx, 1)[0];
+    var adjustedTarget = insertIdx > startIdx ? insertIdx - 1 : insertIdx;
+    source.splice(adjustedTarget, 0, item);
+    return source;
   }
 
   function renderCategoryOptions(selectedId, includeAll) {
@@ -1452,6 +1460,7 @@ var AdminMenu = (function() {
       normalizeMenuState: normalizeMenuState,
       filterProducts: filterProducts,
       validateProductInput: validateProductInput,
+      moveItemToInsertIndex: moveItemToInsertIndex,
       previewImportRows: previewImportRows,
       applyImportPreview: applyImportPreview,
       buildTemplateSheets: buildTemplateSheets
