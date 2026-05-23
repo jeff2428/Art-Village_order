@@ -547,16 +547,36 @@ function getOrdersByStatus(spreadsheetId, status, sheetName) {
 }
 
 /**
- * 尋找欄位索引
- * @param {Array} headers - 標題列
- * @param {string} columnName - 欄位名稱
- * @returns {number} 欄位索引（-1 表示找不到）
- */
-function findColumnIndex(headers, columnName) {
-  for (var i = 0; i < headers.length; i++) {
-    if (headers[i] === columnName) {
-      return i;
-    }
-  }
-  return -1;
-}
+  * 依 LIFF userId 查詢訂單
+  * @param {string} spreadsheetId - Google Sheet 的 ID
+  * @param {string} liffUserId - LIFF userId
+  * @param {string} sheetName - 工作表名稱
+  * @returns {Array<Object>} 訂單資料陣列
+  */
+ function getOrdersByUserId(spreadsheetId, liffUserId, sheetName) {
+   var orders = readAllOrders(spreadsheetId, sheetName);
+   var filtered = [];
+   
+   for (var i = 0; i < orders.length; i++) {
+     if (orders[i].liffUserId === liffUserId) {
+       filtered.push(orders[i]);
+     }
+   }
+   
+   return filtered;
+ }
+
+ /**
+  * 尋找欄位索引
+  * @param {Array} headers - 標題列
+  * @param {string} columnName - 欄位名稱
+  * @returns {number} 欄位索引（-1 表示找不到）
+  */
+ function findColumnIndex(headers, columnName) {
+   for (var i = 0; i < headers.length; i++) {
+     if (headers[i] === columnName) {
+       return i;
+     }
+   }
+   return -1;
+ }

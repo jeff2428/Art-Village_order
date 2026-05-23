@@ -37,6 +37,12 @@ function doGet(e) {
           data: getBusinessHours(spreadsheetId)
         };
         break;
+      case 'getOrdersByUserId':
+        result = {
+          success: true,
+          data: getOrdersByUserId(spreadsheetId, params.liffUserId)
+        };
+        break;
       default:
         result = createUnknownActionResult(action);
     }
