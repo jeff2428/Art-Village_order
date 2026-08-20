@@ -1,4 +1,4 @@
-var CACHE_NAME = 'av-cache-v1';
+var CACHE_NAME = 'av-cache-v2';
 var PRECACHE_URLS = [
   './',
   './index.html',
@@ -20,6 +20,7 @@ self.addEventListener('install', function(event) {
       return cache.addAll(PRECACHE_URLS);
     })
   );
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', function(event) {
@@ -29,6 +30,8 @@ self.addEventListener('activate', function(event) {
         names.filter(function(n) { return n !== CACHE_NAME; })
           .map(function(n) { return caches.delete(n); })
       );
+    }).then(function() {
+      return self.clients.claim();
     })
   );
 });
@@ -40,20 +43,29 @@ self.addEventListener('fetch', function(event) {
     return;
   }
 
+  var isNavigationRequest = event.request.mode === 'navigate';
+  var cacheKey = isNavigationRequest ? './' : event.request;
   var ext = url.pathname.split('.').pop();
-  if (['js', 'css', 'html', 'json', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico'].indexOf(ext) === -1) {
+  if (!isNavigationRequest && ['js', 'css', 'html', 'json', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico'].indexOf(ext) === -1) {
     return;
   }
 
   event.respondWith(
     caches.open(CACHE_NAME).then(function(cache) {
-      return cache.match(event.request).then(function(cached) {
-        var fetchPromise = fetch(event.request).then(function(response) {
-          if (response.ok) {
-            cache.put(event.request, response.clone());
-          }
-          return response;
+      var fetchPromise = fetch(event.request).then(function(response) {
+        if (response.ok) {
+          cache.put(cacheKey, response.clone());
+        }
+        return response;
+      });
+
+      if (isNavigationRequest || ['html', 'js'].indexOf(ext) !== -1) {
+        return fetchPromise.catch(function() {
+          return cache.match(cacheKey);
         });
+      }
+
+      return cache.match(cacheKey).then(function(cached) {
         return cached || fetchPromise;
       });
     })
